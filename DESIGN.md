@@ -88,6 +88,15 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Add exercise:** Lift, then a **Sets** dropdown (1 to 10), then the weight. Picking a number of sets draws that many rows underneath: set badge, a type dropdown (Warm-up, Normal, Failure, Drop, Remove set) and a Reps box.
 - **Failure sets** have no rep count. The Reps box becomes a dashed "Until you can't" (on the card: "Fail"), and the stage shows MAX instead of a number. Failure sets don't count toward volume. Switching a set back from failure gives it a rep count again.
 
+## Start a new routine
+
+- Second button under New workout (always secondary). It opens Add exercise in routine mode: the stage becomes a "New routine" panel with a gold **Save routine** (once there's an exercise) and a quiet Cancel. Check-off boxes are hidden, Add exercise drops to secondary, and nothing gets logged. Saving asks for a name, then empties the card and the routine shows under My routines.
+
+## Get your rank (Ranks tab)
+
+- With no ranked lift yet, the Ranks tab shows a locked badge, one line on what ranks are, and a gold **Get your rank** button. Once ranked, an **Update my maxes** button sits under the list.
+- The calculator opens at the top of the tab in a gold-bordered panel: bodyweight, then squat, bench, deadlift and overhead press, each with **Estimate** (weight × reps). Ranks update live underneath. The rank-up celebration waits for **See my rank**, so it doesn't cover the form while you type.
+
 ## Rank-up celebration
 
 Full-screen overlay (navy at 88%), the new badge, the rank name in its color, what ranked up, and "Let's go". The badge pops with a strong ease-out and a built-in overshoot (scale 0.4 to 1.08 to 1, 640ms); the title and lines rise in after it, staggered 100ms. It gets louder by tier:

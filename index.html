@@ -51,6 +51,9 @@
           <button type="button" class="primary new-workout" id="new-workout">
             <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span id="new-workout-text">New workout</span>
           </button>
+          <button type="button" class="secondary new-workout" id="new-routine">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M4 6h11M4 12h11M4 18h7M18 14v6M15 17h6"/></svg><span id="new-routine-text">Start a new routine</span>
+          </button>
         </div>
 
         <form class="quick" id="quick-form" novalidate>
@@ -120,6 +123,7 @@
 
       <!-- RANKS (personal) -->
       <section id="panel-ranks" role="tabpanel" aria-labelledby="tab-ranks" hidden>
+        <div id="rank-calc" hidden></div>
         <div id="ranks"></div>
         <h2 class="gap">All ranks</h2>
         <ol class="rank-ladder" id="rank-ladder"></ol>

@@ -654,8 +654,11 @@ if (typeof document !== "undefined") {
   let setupStep = mode ? null : "choose"; // "choose" or an index into setupSteps()
   let finishNote = "";
   let loadType = "pct";
+  let rankCalcOpen = false; // the Get your rank calculator on the Ranks tab
   let plan = [{ type: "normal", reps: 5 }]; // the sets in the Add exercise form, before they go on the card
   let newArmed = null; // timer while "Tap again to clear" is showing
+  let armedFor = null; // which button is asking: "workout" or "routine"
+  let routineDraft = false; // building a routine instead of doing a workout
   const MAX_PLAN_SETS = 10;
   const PLAN_TYPES = [["warmup", "Warm-up set"], ["normal", "Normal set"], ["failure", "Failure set"], ["drop", "Drop set"]];
 
@@ -1110,11 +1113,23 @@ if (typeof document !== "undefined") {
     const stage = $("stage");
     const ns = nextSet(entries, maxes, step(), bar());
 
+    if (routineDraft) {
+      const n = entries.length;
+      stage.innerHTML = `<p class="done-msg">New routine</p>
+        <p class="stage-label">${n
+          ? `${n} ${n === 1 ? "exercise" : "exercises"} so far. Add more below, then save it. It'll be in My routines, ready to start with one tap.`
+          : "Pick the exercises and sets below. Nothing gets logged; you're just building the plan."}</p>
+        ${n ? `<button type="button" class="primary" id="save-draft">Save routine</button>` : ""}
+        <button type="button" class="quiet gap-s" id="cancel-draft">Cancel</button>`;
+      lastBarKey = null;
+      stopGhostTick();
+      return;
+    }
+
     if (entries.length === 0) {
       stage.innerHTML = myLifts.length
         ? `<p class="done-msg">Empty card</p>
-           <p class="stage-label">Tap New workout to pick your exercises and sets, start a routine below, or try a sample day to see how it works.</p>
-           <button type="button" class="secondary sample" id="sample-day">Try a sample day</button>`
+           <p class="stage-label">Tap New workout to pick your exercises and sets for today, or Start a new routine to build one you can reuse.</p>`
         : `<p class="done-msg">Let's lift</p>
            <p class="stage-label">Tap New workout to build today's workout and pick your lifts as you go. Lift Day walks you through every set.</p>`;
       lastBarKey = null;
@@ -1307,6 +1322,8 @@ if (typeof document !== "undefined") {
 
     $("clear-card").disabled = entries.length === 0;
     $("add-toggle").hidden = entries.length === 0 || addOpen;
+    $("add-toggle").className = `${routineDraft && entries.length ? "secondary" : "primary"} add-toggle`;
+    $("panel-card").classList.toggle("building", routineDraft);
     $("add-form").hidden = !addOpen;
     renderNewWorkout();
     const noLifts = myLifts.length === 0;
@@ -1319,7 +1336,7 @@ if (typeof document !== "undefined") {
   function renderFinish() {
     const area = $("finish-area");
     const summary = daySummary(entries, maxes, step(), bar());
-    area.innerHTML = summary.sets
+    area.innerHTML = summary.sets && !routineDraft
       ? `<button type="button" class="primary finish-btn" id="finish-day">Finish workout</button>
          <p class="hint center">${summary.sets} ${summary.sets === 1 ? "set" : "sets"} done${summary.volume ? ` · ${summary.volume.toLocaleString()} lbs total volume` : ""}</p>`
       : finishNote ? `<p class="hint center">${finishNote}</p>` : "";
@@ -1416,25 +1433,16 @@ if (typeof document !== "undefined") {
     } else if (e.target.closest(".need-max-stage")) {
       goToMax(e.target.closest(".need-max-stage").dataset.lift);
 
-    } else if (e.target.closest("#sample-day")) {
-      entries = sampleDay();
+    } else if (e.target.closest("#save-draft")) {
+      askRoutine();
+    } else if (e.target.closest("#cancel-draft")) {
+      routineDraft = false;
+      entries = [];
+      addOpen = false;
       saveCard();
       renderToday();
     }
   });
-
-  // A sample day built from your own lifts
-  function sampleDay() {
-    const mine = myLiftObjects();
-    const pick = [...mine.filter((l) => l.kind === "weight" && BAR_LIKE.includes(l.equip)), ...mine].filter((l, i, a) => a.indexOf(l) === i).slice(0, 2);
-    return pick.map((l) => {
-      const unit = unitFor(l.kind);
-      const isBar = l.kind === "weight" && BAR_LIKE.includes(l.equip);
-      const sets = l.kind === "cardio" ? 1 : 3;
-      return newEntry(l.id, sets, { weight: isBar ? 5 : 10, reps: 10, time: 30, cardio: 20 }[l.kind], unit,
-        l.kind === "weight" ? (isBar ? { type: "pct", value: 75 } : { type: "lbs", value: 25 }) : null);
-    });
-  }
 
   $("card").addEventListener("click", (e) => {
     const check = e.target.closest("[data-check]");
@@ -1516,8 +1524,10 @@ if (typeof document !== "undefined") {
   // ---------- "Make this a routine?" ----------
   function askRoutine() {
     const dlg = $("routine-dialog");
-    $("routine-title").textContent = role === "coach" && !isPersonal() ? "Save as a team workout?" : "Make this a routine?";
-    $("routine-why").textContent = role === "coach" && !isPersonal()
+    $("routine-title").textContent = routineDraft ? "Name your routine" : role === "coach" && !isPersonal() ? "Save as a team workout?" : "Make this a routine?";
+    $("routine-skip").textContent = routineDraft ? "Keep editing" : "Not now";
+    $("routine-why").textContent = routineDraft ? "You'll find it under My routines on this tab."
+      : role === "coach" && !isPersonal()
       ? "Players get it the next time you send them the team link."
       : "Save these exercises and sets so you can start this workout again with one tap.";
     $("routine-name-input").value = routineNameFor(entries, liftName);
@@ -1528,16 +1538,27 @@ if (typeof document !== "undefined") {
 
   $("routine-dialog").addEventListener("click", (e) => {
     const dlg = $("routine-dialog");
-    if (e.target.closest("#routine-skip") || e.target === dlg) { dlg.close(); return finishWorkout(); }
+    if (e.target.closest("#routine-skip") || e.target === dlg) { dlg.close(); return routineDraft ? null : finishWorkout(); }
     if (!e.target.closest("#routine-save")) return;
     const name = $("routine-name-input").value.trim().slice(0, 30);
     if (!name) { $("routine-error").textContent = "Give it a name."; return; }
     saveRoutine(name);
     dlg.close();
+    if (routineDraft) {
+      // The plan is saved; the card goes back to empty
+      routineDraft = false;
+      entries = [];
+      cardRoutine = null;
+      save("liftday.cardRoutine", null);
+      addOpen = false;
+      finishNote = `Saved “${escapeHTML(name)}”. Tap Start under My routines when you're ready to lift.`;
+      saveCard();
+      return renderToday();
+    }
     finishWorkout(`Saved “${name}” as a routine. `);
   });
 
-  $("routine-dialog").addEventListener("cancel", () => finishWorkout());
+  $("routine-dialog").addEventListener("cancel", () => { if (!routineDraft) finishWorkout(); });
 
   function saveRoutine(name) {
     const lines = freshCopy(entries);
@@ -1586,6 +1607,7 @@ if (typeof document !== "undefined") {
   });
 
   function loadLines(lines, name) {
+    routineDraft = false;
     commitPrevious();
     entries = freshCopy(lines);
     for (const l of entries) if (!myLifts.includes(l.lift)) myLifts.push(l.lift);
@@ -1601,6 +1623,7 @@ if (typeof document !== "undefined") {
   }
 
   $("clear-card").addEventListener("click", () => {
+    routineDraft = false;
     commitPrevious();
     entries = [];
     cardRoutine = null;
@@ -1687,7 +1710,8 @@ if (typeof document !== "undefined") {
   }
 
   function statusEl() {
-    return setupStep !== null ? $("ob-status") : $("max-status");
+    if (setupStep !== null) return $("ob-status");
+    return rankCalcOpen && $("rank-calc").contains(document.activeElement) ? $("rank-status") : $("max-status");
   }
 
   function showStatus(text) {
@@ -2261,6 +2285,62 @@ if (typeof document !== "undefined") {
     });
   }
 
+  // ---------- Get your rank: maxes right here on the Ranks tab ----------
+
+  function openRankCalc() {
+    rankCalcOpen = true;
+    const calc = $("rank-calc");
+    const lifts = RANKED.map(liftById).filter(Boolean);
+    calc.innerHTML = `<div class="rank-calc">
+        <p class="sheet-title big">Get your rank</p>
+        <p class="hint">Enter your bodyweight and a max for any of these lifts. Don't know a max? Tap <strong>Estimate</strong> and put in a recent set. Your rank updates as you type.</p>
+        <div class="max-row bw-row">
+          <label for="rk-bw">Bodyweight</label>
+          <input id="rk-bw" class="bw-input" type="number" inputmode="numeric" min="80" max="500" placeholder="lbs" value="${bodyweight || ""}">
+        </div>
+        ${lifts.map((l) => `
+        <div class="max-item">
+          <div class="max-row">
+            <div class="max-label">
+              <label for="rk-max-${l.id}">${l.name}</label>
+              <button type="button" class="link est-toggle" data-lift="${l.id}" aria-expanded="false">Estimate</button>
+            </div>
+            <input id="rk-max-${l.id}" class="max-input" data-lift="${l.id}" type="number" inputmode="numeric" min="45" max="1500" placeholder="lbs" value="${maxes[l.id] || ""}">
+            <span class="ratio" data-ratio="${l.id}"></span>
+          </div>
+          <div class="estimate" data-est="${l.id}" hidden>
+            <p class="est-q">A set you did recently:</p>
+            <div class="est-fields">
+              <input class="est-w" type="number" inputmode="numeric" placeholder="lbs" aria-label="${l.name} weight lifted">
+              <span aria-hidden="true">×</span>
+              <input class="est-r" type="number" inputmode="numeric" placeholder="reps" aria-label="${l.name} reps">
+            </div>
+            <p class="est-out" aria-live="polite"></p>
+          </div>
+        </div>`).join("")}
+        <p class="status" id="rank-status" aria-live="polite"></p>
+        <button type="button" class="primary gap-s" id="rank-calc-done">See my rank</button>
+      </div>`;
+    calc.hidden = false;
+    renderRanks();
+    updateRatios();
+    $("rk-bw").focus();
+  }
+
+  function closeRankCalc() {
+    rankCalcOpen = false;
+    $("rank-calc").hidden = true;
+    $("rank-calc").innerHTML = "";
+    checkRankUp();
+    renderRanks();
+    $("panel-ranks").scrollIntoView({ block: "start" });
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-get-rank]")) return openRankCalc();
+    if (e.target.closest("#rank-calc-done")) return closeRankCalc();
+  });
+
   function renderRanks() {
     const el = $("ranks");
     if (!el || !isPersonal()) return;
@@ -2272,11 +2352,14 @@ if (typeof document !== "undefined") {
     const overall = overallRank(rows.map((x) => x.r));
 
     let top;
-    if (!bodyweight) {
-      top = `<div class="empty-box"><p class="empty-title">Add your bodyweight</p><p class="hint">Ranks compare your max to your bodyweight. Enter it in Profile.</p>
-        <button type="button" class="secondary gap-s" data-goto-max>Go to Profile</button></div>`;
-    } else if (!rows.length) {
-      top = `<div class="empty-box"><p class="empty-title">No ranked lifts yet</p><p class="hint">Ranks cover squat, bench press, deadlift and overhead press. Add them under Profile > My lifts and enter a max.</p></div>`;
+    const ranked = rows.filter((x) => x.r);
+    if (!ranked.length) {
+      top = rankCalcOpen ? "" : `<div class="empty-box get-rank-box">
+          ${rankBadgeSVG(0, "badge-xl", true)}
+          <p class="empty-title">Where do you stack up?</p>
+          <p class="hint">Your squat, bench press, deadlift and overhead press compared with your bodyweight, from Wood up to Olympian.</p>
+          <button type="button" class="primary gap-s" data-get-rank>Get your rank</button>
+        </div>`;
     } else {
       top = `${overall ? `<div class="overall">
           ${rankBadgeSVG(overall.index, "badge-xl")}
@@ -2292,9 +2375,10 @@ if (typeof document !== "undefined") {
               </div>
               ${r ? `<p class="hint small">${best} lbs${estimated ? " est." : ""} · ${bodyweightRatio(best, bodyweight)}× BW${r.percent !== null ? ` · stronger than ~${r.percent}% of lifters` : ""}</p>
                 <p class="roadmap">${r.next ? `Next: <strong>${r.next.rank}</strong> at <strong>${r.next.weight} lbs</strong> (+${r.next.weight - best})` : "Top rank reached."}</p>`
-              : `<p class="hint small">Enter a max in Profile, or log a set with Just Log.</p>`}
+              : `<p class="hint small">No max yet. Tap Update my maxes below.</p>`}
             </div>
-          </li>`).join("")}</ul>`;
+          </li>`).join("")}</ul>
+        ${rankCalcOpen ? "" : `<button type="button" class="secondary gap-s full" data-get-rank>Update my maxes</button>`}`;
     }
     el.innerHTML = `${top}<div class="gap-s">${sexSwitch}</div>
       <p class="note">Ranks use your max or your best estimated max from logged sets, divided by your bodyweight. Cut-offs come from <a href="https://strengthlevel.com/strength-standards/bench-press/lb" target="_blank" rel="noopener">Strength Level</a> (squat, bench, deadlift; "stronger than" is among lifters on that site) and <a href="https://www.strengthlog.com/overhead-press-strength-standards-lb/" target="_blank" rel="noopener">StrengthLog</a> (overhead press). Approximate.</p>`;
@@ -2424,28 +2508,34 @@ if (typeof document !== "undefined") {
 
   // ---------- New workout ----------
   function renderNewWorkout() {
-    const btn = $("new-workout");
     const hasCard = entries.length > 0;
-    btn.className = `${hasCard ? "secondary" : "primary"} new-workout${newArmed ? " armed" : ""}`;
-    $("new-workout-text").textContent = newArmed ? "Tap again to clear this card" : "New workout";
-    $("new-workout-bar").hidden = !hasCard && addOpen; // the form is already open on an empty card
+    const busy = hasCard || routineDraft;
+    $("new-workout").className = `${busy ? "secondary" : "primary"} new-workout${armedFor === "workout" ? " armed" : ""}`;
+    $("new-workout-text").textContent = armedFor === "workout" ? "Tap again to clear this card" : "New workout";
+    $("new-routine").className = `secondary new-workout${armedFor === "routine" ? " armed" : ""}`;
+    $("new-routine-text").textContent = armedFor === "routine" ? "Tap again to clear this card" : "Start a new routine";
+    $("new-workout-bar").hidden = (!hasCard && addOpen) || routineDraft; // the form is already open
   }
 
   function disarmNew() {
     clearTimeout(newArmed);
     newArmed = null;
+    armedFor = null;
     renderNewWorkout();
   }
 
-  function startNewWorkout() {
+  function startNewWorkout(kind = "workout") {
     if (entries.length) {
       // Something is on the card: ask once more before clearing it
-      if (!newArmed) {
+      if (armedFor !== kind) {
+        clearTimeout(newArmed);
+        armedFor = kind;
         newArmed = setTimeout(disarmNew, 4000);
         return renderNewWorkout();
       }
       clearTimeout(newArmed);
       newArmed = null;
+      armedFor = null;
       commitPrevious();
       entries = [];
       cardRoutine = null;
@@ -2455,13 +2545,15 @@ if (typeof document !== "undefined") {
       saveCard();
     }
     finishNote = "";
+    routineDraft = kind === "routine";
     addOpen = true;
     renderToday();
     if (myLifts.length) $("lift").focus();
     else { const box = document.querySelector("#add-picker input[type=search]"); if (box) box.focus(); }
   }
 
-  $("new-workout").addEventListener("click", startNewWorkout);
+  $("new-workout").addEventListener("click", () => startNewWorkout("workout"));
+  $("new-routine").addEventListener("click", () => startNewWorkout("routine"));
 
   // ---------- The set list in Add exercise ----------
   function renderSetsSelect() {
@@ -2656,7 +2748,7 @@ if (typeof document !== "undefined") {
   }
 
   function checkRankUp() {
-    if (!isPersonal()) return;
+    if (!isPersonal() || rankCalcOpen) return; // the calculator celebrates once, on See my rank
     const now = currentRanks();
     const up = rankUp(rankState || { lifts: {} }, now);
     rankState = now;

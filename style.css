@@ -1519,3 +1519,24 @@ h2 { font-size: 1.0625rem; }
   font-weight: 700;
 }
 .plan-fail { font-size: 0.8125rem; color: var(--soft); }
+
+/* ---------- Start a new routine, Get your rank ---------- */
+.new-workout-bar { display: grid; gap: 0.5rem; }
+.new-workout-bar[hidden] { display: none; }
+.building .check { visibility: hidden; }
+.building .set-row.next .set-type { border-color: transparent; }
+.full { width: 100%; }
+
+.get-rank-box { display: grid; justify-items: center; text-align: center; gap: 0.25rem; }
+.get-rank-box .badge-xl { opacity: 0.85; }
+.get-rank-box .primary { width: 100%; }
+
+.rank-calc {
+  margin-bottom: 1.5rem;
+  padding: 1rem;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  background: var(--navy-800);
+}
+.rank-calc .bw-row { margin: 1rem 0 0.5rem; }
+.rank-calc .primary { width: 100%; }

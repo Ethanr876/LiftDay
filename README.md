@@ -40,6 +40,7 @@ The tab bar sits at the bottom of the screen.
 **Building a workout (Workout tab)**
 
 1. Tap **New workout**, then pick one of your lifts (or tap **Search all lifts** to find a new one; it's added to your list). Choose **how many sets** from the dropdown and that many rows appear. Give each set a type (warm-up, normal, failure, drop, or remove it) and its reps. Failure sets don't take a rep count: you go until you can't. Set the weight (% of max or lbs) and tap **Add to workout**. Add more with **Add exercise**.
+   - To build a routine without lifting yet, tap **Start a new routine**, add the exercises and sets, then **Save routine** and name it. It shows under My routines with a Start button.
 2. Each exercise shows a table: **Set · Previous · Lbs · Reps · ✓**. Type a different weight or reps into any set. **Previous** shows what you did last time for that set.
 3. **Add set** adds another set (copying the last one).
 4. **Tap a set number** to change it: **Warm-up** (W), **Normal** (numbered), **Failure** (F), **Drop set** (D), or **Remove set**. Warm-ups don't count toward volume or your top set.
@@ -149,6 +150,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.11:** Get your rank calculator on the Ranks tab (maxes and estimates right there), Start a new routine (build and save a routine without logging a workout); sample day removed
 - [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines
 - [x] **m2.7:** bottom tab bar (Home, Workout, Ranks/Team, Profile), rank badges, muscle recovery map, fun features personal-only
 - [ ] **m3 (Nov 13):** lbs / kg, auto warm-up sets, status update #2, **feature freeze**
