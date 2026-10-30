@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#0b1730">
+  <title>Lift Day</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Archivo:wdth,wght@62..125,400..800&family=Big+Shoulders+Display:wght@700;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="pr-banner" id="pr-banner" role="status" aria-live="polite"></div>
+
+  <!-- First visit: Personal or Team, then pick lifts (and a short setup for Personal) -->
+  <section class="onboarding" id="onboarding" hidden aria-live="polite"></section>
+
+  <div id="app" hidden>
+    <header class="top">
+      <h1>Lift Day</h1>
+      <p class="today" id="today"></p>
+    </header>
+
+    <!-- Bottom tab bar -->
+    <nav class="tabs" role="tablist" aria-label="Lift Day sections">
+      <button role="tab" id="tab-home" aria-controls="panel-home" aria-selected="true"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11l8-7 8 7v9H4z"/><path d="M10 20v-5h4v5"/></svg><span>Home</span></button>
+      <button role="tab" id="tab-card" aria-controls="panel-card" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12h3M19 12h3M5 8v8M19 8v8M8 6v12M16 6v12M8 12h8"/></svg><span>Workout</span></button>
+      <button role="tab" id="tab-ranks" aria-controls="panel-ranks" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3l7 4v6c0 4-3 7-7 8-4-1-7-4-7-8V7z"/><path d="M12 8l1.4 2.9 3.1.4-2.3 2.1.6 3.1L12 15l-2.8 1.5.6-3.1-2.3-2.1 3.1-.4z"/></svg><span>Ranks</span></button>
+      <button role="tab" id="tab-team" aria-controls="panel-team" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M3 20c0-3.5 2.7-6 6-6s6 2.5 6 6M15 14.5c3 0 6 1.8 6 5.5"/></svg><span>Team</span></button>
+      <button role="tab" id="tab-me" aria-controls="panel-me" aria-selected="false" tabindex="-1"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg><span>Profile</span></button>
+    </nav>
+
+    <main>
+      <!-- HOME: recovery map + recent days -->
+      <section id="panel-home" role="tabpanel" aria-labelledby="tab-home">
+        <h2>Muscle recovery</h2>
+        <div id="recovery"></div>
+        <div class="personal-only">
+          <h2 class="gap">Recent lift days</h2>
+          <div id="history-list"></div>
+          <h2 class="gap">PRs</h2>
+          <div id="pr-list"></div>
+        </div>
+        <div class="team-only" id="home-team"></div>
+      </section>
+
+      <!-- WORKOUT -->
+      <section id="panel-card" role="tabpanel" aria-labelledby="tab-card" hidden>
+        <form class="quick" id="quick-form" novalidate>
+          <label class="sr-only" for="quick-input">Just log a set</label>
+          <input id="quick-input" placeholder="Just log: bench 185 for 8" autocomplete="off" enterkeyhint="done">
+          <button type="button" class="secondary icon-btn" id="quick-mic" hidden aria-label="Say it instead">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/></svg>
+          </button>
+          <button type="submit" class="secondary">Log</button>
+        </form>
+        <p class="status quick-status" id="quick-status" aria-live="polite"></p>
+
+        <section class="stage" id="stage" aria-live="polite"></section>
+
+        <ol class="card" id="card" aria-label="Today's lifts"></ol>
+
+        <div class="finish" id="finish-area"></div>
+
+        <form class="add" id="add-form" novalidate>
+          <h2>Add to the card</h2>
+          <div class="fields">
+            <label class="field lift">
+              <span>Lift</span>
+              <select name="lift" id="lift"></select>
+            </label>
+            <label class="field f-sets">
+              <span>Sets</span>
+              <input name="sets" type="number" inputmode="numeric" min="1" max="20" value="4" required>
+            </label>
+            <label class="field f-reps">
+              <span id="reps-label">Reps</span>
+              <input name="reps" type="number" inputmode="numeric" min="1" value="5" required>
+            </label>
+            <label class="field f-load">
+              <span id="load-label">% of max</span>
+              <input name="load" type="number" inputmode="decimal" min="1" step="0.5" value="75" required>
+            </label>
+            <div class="field f-loadtype">
+              <span id="loadtype-label">Weight as</span>
+              <div class="seg two" role="radiogroup" aria-labelledby="loadtype-label">
+                <button type="button" role="radio" class="seg-btn" data-loadtype="pct" aria-checked="true"><strong>% of max</strong></button>
+                <button type="button" role="radio" class="seg-btn" data-loadtype="lbs" aria-checked="false"><strong>Lbs</strong></button>
+              </div>
+            </div>
+          </div>
+          <p class="error" id="add-error" role="alert"></p>
+          <button type="submit" class="primary">Add to card</button>
+        </form>
+
+        <div class="card-actions">
+          <button type="button" class="quiet" id="edit-lifts">Edit my lifts</button>
+          <button type="button" class="quiet" id="clear-card">Clear today's card</button>
+        </div>
+      </section>
+
+      <!-- RANKS (personal) -->
+      <section id="panel-ranks" role="tabpanel" aria-labelledby="tab-ranks" hidden>
+        <div id="ranks"></div>
+        <h2 class="gap">All ranks</h2>
+        <ol class="rank-ladder" id="rank-ladder"></ol>
+      </section>
+
+      <!-- TEAM: coach builds + shares, player joins -->
+      <section id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden>
+        <div id="team-area"></div>
+        <p class="status" id="team-status" aria-live="polite"></p>
+      </section>
+
+      <!-- PROFILE: settings, folded into sections -->
+      <section id="panel-me" role="tabpanel" aria-labelledby="tab-me" hidden>
+        <details class="sec" id="sec-maxes" open>
+          <summary>Maxes &amp; bodyweight</summary>
+        <p class="hint">Your current 1-rep max for each weighted lift you picked, in pounds. Don't know one? Tap <strong>Estimate</strong> and enter a set you've done. Saved on this phone only.</p>
+        <div class="max-row bw-row">
+          <label for="bodyweight">Bodyweight</label>
+          <input id="bodyweight" type="number" inputmode="numeric" min="80" max="500" placeholder="lbs">
+          <span class="ratio" aria-hidden="true"></span>
+        </div>
+        <div class="max-list" id="me-maxes"></div>
+        <p class="status" id="max-status" aria-live="polite"></p>
+        </details>
+
+        <details class="sec" id="sec-lifts">
+          <summary>My lifts <span class="sum-count" id="lifts-count"></span></summary>
+          <div class="picker" id="lifts-picker"></div>
+        </details>
+
+        <details class="sec personal-only" id="sec-gym">
+          <summary>My gym</summary>
+          <p class="hint">Pick your bar and the plates you own. Barbell weights round to what you can actually load.</p>
+          <div id="me-gym"></div>
+        </details>
+
+        <details class="sec personal-only" id="sec-hype">
+          <summary>PR sound</summary>
+          <p class="hint">Plays with a big vibration when you set a PR (vibration works on Android phones).</p>
+          <div id="hype-setting"></div>
+        </details>
+
+        <div class="mode-box">
+          <p id="mode-text"></p>
+          <div class="mode-actions">
+            <button type="button" class="secondary" id="switch-mode"></button>
+            <button type="button" class="secondary personal-only" id="redo-setup">Redo setup</button>
+            <button type="button" class="secondary team-only" id="change-role">Change coach or player</button>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <script src="lifts.js"></script>
+  <script src="figures.js"></script>
+  <script src="script.js"></script>
+</body>
+</html>
