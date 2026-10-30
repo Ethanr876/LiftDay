@@ -82,6 +82,12 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Add exercise** folds away after you add one, behind a gold "Add exercise" button. Routines list under it with Start / Delete; the one on today's card has a gold border.
 - Editing a cell never redraws the table (so focus stays where you tapped); only the stage and totals update live.
 
+## New workout and the set list
+
+- **New workout** sits at the top of the Workout tab. On an empty card it's the gold button and opens Add exercise. With exercises on the card it drops to a secondary button, and the first tap turns red ("Tap again to clear this card") for 4 seconds so a workout isn't wiped by accident.
+- **Add exercise:** Lift, then a **Sets** dropdown (1 to 10), then the weight. Picking a number of sets draws that many rows underneath: set badge, a type dropdown (Warm-up, Normal, Failure, Drop, Remove set) and a Reps box.
+- **Failure sets** have no rep count. The Reps box becomes a dashed "Until you can't" (on the card: "Fail"), and the stage shows MAX instead of a number. Failure sets don't count toward volume. Switching a set back from failure gives it a rep count again.
+
 ## Rank-up celebration
 
 Full-screen overlay (navy at 88%), the new badge, the rank name in its color, what ranked up, and "Let's go". The badge pops with a strong ease-out and a built-in overshoot (scale 0.4 to 1.08 to 1, 640ms); the title and lines rise in after it, staggered 100ms. It gets louder by tier:

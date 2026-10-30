@@ -47,6 +47,12 @@
 
       <!-- WORKOUT -->
       <section id="panel-card" role="tabpanel" aria-labelledby="tab-card" hidden>
+        <div class="new-workout-bar" id="new-workout-bar">
+          <button type="button" class="primary new-workout" id="new-workout">
+            <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg><span id="new-workout-text">New workout</span>
+          </button>
+        </div>
+
         <form class="quick" id="quick-form" novalidate>
           <label class="sr-only" for="quick-input">Just log a set</label>
           <input id="quick-input" placeholder="Just log: bench 185 for 8" autocomplete="off" enterkeyhint="done">
@@ -81,7 +87,7 @@
             </div>
             <label class="field f-sets">
               <span>Sets</span>
-              <input name="sets" type="number" inputmode="numeric" min="1" max="20" value="4" required>
+              <select name="sets" id="sets-select"></select>
             </label>
             <label class="field f-reps">
               <span id="reps-label">Reps</span>
@@ -99,6 +105,7 @@
               </div>
             </div>
           </div>
+          <div class="set-plan" id="set-plan" role="list" aria-label="Sets for this exercise"></div>
           <p class="error" id="add-error" role="alert"></p>
           <button type="submit" class="primary">Add to workout</button>
         </form>

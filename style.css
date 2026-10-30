@@ -1484,3 +1484,38 @@ h2 { font-size: 1.0625rem; }
   .ru-badge, .ru-rank, .ru-sub, .ru-ok { animation: ru-fade 300ms ease both; }
   .ru-rays, .ru-sparks, .ru-flash, .ru-rings, .ru-halo, .ru-confetti { display: none; }
 }
+
+/* ---------- New workout + the set list in Add exercise ---------- */
+.new-workout-bar { margin-bottom: 1rem; }
+.new-workout { width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; }
+.new-workout svg { width: 1.25rem; height: 1.25rem; }
+.new-workout.armed { border-color: var(--red); color: var(--red); }
+
+#add-form:not([data-kind="cardio"]) .f-reps { display: none; }
+#add-form[data-kind="cardio"] .set-plan { display: none; }
+
+.set-plan { margin-top: 1rem; display: grid; gap: 0.5rem; }
+.plan-head, .plan-row {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr 6.5rem;
+  align-items: center;
+  gap: 0.5rem;
+}
+.plan-head { color: var(--soft); font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.plan-head > span:first-child, .plan-head > span:last-child { text-align: center; }
+.plan-row .set-type { cursor: default; }
+.plan-row select { min-height: 2.75rem; }
+.plan-row .cell { min-height: 2.75rem; }
+
+.fail-cell {
+  display: grid;
+  place-items: center;
+  min-height: 2.5rem;
+  border: 1px dashed var(--line);
+  border-radius: var(--radius);
+  background: none;
+  color: var(--red);
+  font-size: 0.875rem;
+  font-weight: 700;
+}
+.plan-fail { font-size: 0.8125rem; color: var(--soft); }

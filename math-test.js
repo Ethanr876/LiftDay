@@ -310,6 +310,31 @@ for (const [label, got, expected] of last) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length;
+// Failure sets: no rep count, and they don't break checks, volume or the scheme line
+const plan = R.entryFromPlan("bench", [{ type: "warmup", reps: 10 }, { type: "normal", reps: 8 }, { type: "normal", reps: 8 }, { type: "failure", reps: 8 }], "reps", { type: "lbs", value: 135 });
+const failDone = { ...plan, rows: plan.rows.map((r) => ({ ...r, done: true })) };
+const flip = R.entryFromPlan("bench", [{ type: "normal", reps: 6 }], "reps", null);
+R.changeSetType(flip, flip.rows[0], "failure");
+const flipNull = flip.rows[0].reps;
+R.changeSetType(flip, flip.rows[0], "normal");
+const failTests = [
+  ["failure set from the plan has no reps", plan.rows[3].reps, null],
+  ["plan keeps 4 sets in order", plan.rows.map((r) => r.type[0]).join(""), "wnnf"],
+  ["a plan with a failure set passes the checks", R.checkEntry(plan).length, 0],
+  ["normal set with no reps still fails the checks", R.checkEntry(R.entryFromPlan("bench", [{ type: "normal", reps: null }], "reps", null)).length, 1],
+  ["scheme: 1 warm-up + 2 × 8 + 1 to failure", R.schemeText(plan), "1 warm-up + 2 × 8 + 1 to failure at 135 lbs"],
+  ["scheme: only failure sets", R.schemeText(R.entryFromPlan("push-up", [{ type: "failure" }, { type: "failure" }], "reps", null)), "2 to failure"],
+  ["volume skips the failure set (135 × 16)", R.daySummary([failDone], {}).volume, 2160],
+  ["switching to failure drops the reps", flipNull, null],
+  ["switching back gives reps again", flip.rows[0].reps, 6],
+];
+for (const [label, got, expected] of failTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);

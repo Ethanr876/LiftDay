@@ -160,6 +160,7 @@ function liftIdFromName(name) {
 // A line on the card (one exercise):
 //   { lift, unit: "reps" | "sec" | "min", reps, load: { type: "pct" | "lbs", value } | null,
 //     rows: [{ type: "normal" | "warmup" | "failure" | "drop", reps, lbs, done }] }
+// A failure set has no rep count (reps: null): you go until you can't.
 // Each row is one set. A row's lbs is null when it uses the exercise's load (e.g. 75% of your max).
 // "reps" holds the seconds or minutes for timed lifts. sets = rows.length.
 
@@ -213,7 +214,8 @@ function checkEntry(entry) {
   const unit = e.unit;
   const label = { reps: "Reps must be 1 to 50.", sec: "Seconds must be 5 to 600.", min: "Minutes must be 1 to 180." }[unit];
   if (unit !== "min" && !inRange(e.rows.length, LIMITS.sets)) problems.push(["sets", "Sets must be 1 to 20."]);
-  if (!inRange(e.reps, LIMITS[unit]) || e.rows.some((r) => !inRange(r.reps, LIMITS[unit]))) problems.push(["reps", label]);
+  const badReps = (r) => (r.type === "failure" ? r.reps !== null && r.reps !== undefined && !inRange(r.reps, LIMITS[unit]) : !inRange(r.reps, LIMITS[unit]));
+  if (!inRange(e.reps, LIMITS[unit]) || e.rows.some(badReps)) problems.push(["reps", label]);
   if (e.load && e.load.type === "pct" && !inRange(e.load.value, LIMITS.pct)) problems.push(["load", "Percent must be 1 to 120."]);
   if (e.load && e.load.type === "lbs" && !inRange(e.load.value, LIMITS.lbs)) problems.push(["load", "Weight must be 1 to 1500 lbs."]);
   if (e.rows.some((r) => !SET_TYPES.includes(r.type) || (r.lbs !== null && r.lbs !== undefined && !inRange(r.lbs, [0, 1500])))) problems.push(["load", "A set has a weight or type that doesn't fit."]);
@@ -298,24 +300,30 @@ function daySummary(entries, maxes, step = ROUND_TO, bar = BAR) {
     const weights = done.map((r) => rowWeight(e, r, maxes, step, bar));
     if (weights.some((w) => w === null)) continue; // needed a max that was never entered
     const top = weights.some((w) => typeof w === "number") ? Math.max(...weights.filter((w) => typeof w === "number")) : undefined;
-    lines.push({ lift: e.lift, sets: done.length, reps: done[done.length - 1].reps, unit: e.unit, weight: top });
+    const counted = done.filter((r) => typeof r.reps === "number");
+    lines.push({ lift: e.lift, sets: done.length, reps: counted.length ? counted[counted.length - 1].reps : "failure", unit: e.unit, weight: top });
     sets += done.length;
     done.forEach((r, i) => {
-      if (r.type !== "warmup" && typeof weights[i] === "number" && e.unit === "reps") volume += r.reps * weights[i];
+      if (r.type !== "warmup" && typeof weights[i] === "number" && typeof r.reps === "number" && e.unit === "reps") volume += r.reps * weights[i];
     });
   }
   return { lines, sets, volume };
 }
 
-// How a line reads: "4 × 5 at 75%", "3 × 12", "3 × 45 sec", "20 min", "1 warm-up + 3 × 5 at 75%"
+// How a line reads: "4 × 5 at 75%", "3 × 12", "3 × 45 sec", "20 min", "1 warm-up + 3 × 5 at 75%",
+// "3 × 8 + 1 to failure", "2 to failure"
 function schemeText(entry) {
   const e = normEntry(entry);
   if (e.unit === "min") return `${e.rows[0] ? e.rows[0].reps : e.reps} min`;
   const warm = e.rows.filter((r) => r.type === "warmup").length;
-  const work = e.rows.length - warm;
-  const sameReps = e.rows.every((r) => r.reps === e.rows[0].reps);
-  const repText = sameReps && e.rows.length ? e.rows[0].reps : e.reps;
-  const base = `${warm ? `${warm} warm-up + ` : ""}${work} × ${repText}${e.unit === "sec" ? " sec" : ""}`;
+  const fail = e.rows.filter((r) => r.type === "failure").length;
+  const working = e.rows.filter((r) => r.type !== "warmup" && r.type !== "failure");
+  const sameReps = working.every((r) => r.reps === working[0].reps);
+  const repText = sameReps && working.length ? working[0].reps : e.reps;
+  const parts = [];
+  if (working.length) parts.push(`${working.length} × ${repText}${e.unit === "sec" ? " sec" : ""}`);
+  if (fail) parts.push(`${fail} to failure`);
+  const base = `${warm ? `${warm} warm-up + ` : ""}${parts.join(" + ") || "0 sets"}`;
   if (!e.load) return base;
   return e.load.type === "pct" ? `${base} at ${e.load.value}%` : `${base} at ${e.load.value} lbs`;
 }
@@ -323,6 +331,20 @@ function schemeText(entry) {
 // A blank exercise with n sets
 function newEntry(lift, sets, reps, unit, load) {
   return { lift, unit, reps, load, rows: Array.from({ length: sets }, () => ({ type: "normal", reps, lbs: null, done: false })), sets };
+}
+
+// An exercise from a list of planned sets: [{ type, reps }]. Failure sets get no rep count.
+function entryFromPlan(lift, plan, unit, load) {
+  const rows = plan.map((p) => ({ type: p.type, reps: p.type === "failure" ? null : p.reps, lbs: null, done: false }));
+  const firstCounted = rows.find((r) => typeof r.reps === "number");
+  return { lift, unit, reps: firstCounted ? firstCounted.reps : (unit === "sec" ? 30 : 10), load, rows, sets: rows.length };
+}
+
+// Changing a set's type. Going to failure drops the rep count; coming back gives it one again.
+function changeSetType(entry, row, type) {
+  row.type = type;
+  if (type === "failure") row.reps = null;
+  else if (typeof row.reps !== "number") row.reps = entry.reps;
 }
 
 // The same exercises with every set unchecked (for routines and the next workout)
@@ -573,7 +595,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     roundToLoadable, loadStep, setWeight, platesPerSide, loadedWeight, estimateMax, bodyweightRatio,
     buildLibrary, normalize, searchLifts, checkLiftName, liftIdFromName, normEntry, unitFor, entryWeight,
-    SET_TYPES, rowWeight, setLabels, newEntry, freshCopy, routineNameFor,
+    SET_TYPES, rowWeight, setLabels, newEntry, entryFromPlan, changeSetType, freshCopy, routineNameFor,
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
     encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText,
@@ -632,6 +654,10 @@ if (typeof document !== "undefined") {
   let setupStep = mode ? null : "choose"; // "choose" or an index into setupSteps()
   let finishNote = "";
   let loadType = "pct";
+  let plan = [{ type: "normal", reps: 5 }]; // the sets in the Add exercise form, before they go on the card
+  let newArmed = null; // timer while "Tap again to clear" is showing
+  const MAX_PLAN_SETS = 10;
+  const PLAN_TYPES = [["warmup", "Warm-up set"], ["normal", "Normal set"], ["failure", "Failure set"], ["drop", "Drop set"]];
 
 
   const $ = (id) => document.getElementById(id);
@@ -1087,10 +1113,10 @@ if (typeof document !== "undefined") {
     if (entries.length === 0) {
       stage.innerHTML = myLifts.length
         ? `<p class="done-msg">Empty card</p>
-           <p class="stage-label">Add today's lifts below, or try a sample day to see how it works. Your next set shows up here.</p>
+           <p class="stage-label">Tap New workout to pick your exercises and sets, start a routine below, or try a sample day to see how it works.</p>
            <button type="button" class="secondary sample" id="sample-day">Try a sample day</button>`
         : `<p class="done-msg">Let's lift</p>
-           <p class="stage-label">Build today's workout: add an exercise below and pick your lifts as you go. Lift Day walks you through every set.</p>`;
+           <p class="stage-label">Tap New workout to build today's workout and pick your lifts as you go. Lift Day walks you through every set.</p>`;
       lastBarKey = null;
       return;
     }
@@ -1112,7 +1138,7 @@ if (typeof document !== "undefined") {
     const lift = liftById(ns.lift);
     const entry = entries[ns.entryIndex];
     const setText = ns.unit === "min" ? "" : ` · set ${ns.setIndex + 1} of ${entry.sets}`;
-    const amountText = ns.unit === "reps" && typeof ns.weight === "number" ? ` · ${ns.reps} reps` : "";
+    const amountText = ns.type === "failure" ? " · to failure" : ns.unit === "reps" && typeof ns.weight === "number" ? ` · ${ns.reps} reps` : "";
     const label = `<p class="stage-label"><strong>${lift.name}</strong>${setText}${amountText}</p>`;
     const picture = `<div class="stage-fig">${figureSVG(lift.pattern, lift.equip, "fig-lg")}</div>`;
 
@@ -1143,7 +1169,9 @@ if (typeof document !== "undefined") {
       }
     } else {
       const unit = { reps: "REPS", sec: "SEC", min: "MIN" }[ns.unit];
-      big = `<p class="jersey">${ns.reps}<small>${unit}</small></p>`;
+      big = ns.type === "failure"
+        ? `<p class="jersey">MAX<small>${unit}</small></p>`
+        : `<p class="jersey">${ns.reps}<small>${unit}</small></p>`;
       visual = picture;
     }
 
@@ -1256,10 +1284,12 @@ if (typeof document !== "undefined") {
         const p = prev[s];
         return `<div class="set-row${r.done ? " done" : ""}${isNext ? " next" : ""}" role="row">
           <button type="button" class="set-type t-${r.type}" data-menu="${i}:${s}" aria-label="Set ${labels[s]}, ${r.type === "normal" ? "normal set" : r.type + " set"}. Change set type">${labels[s]}</button>
-          <span class="prev">${p ? `${typeof p.lbs === "number" ? `${p.lbs} × ` : ""}${p.reps}` : "–"}</span>
+          <span class="prev">${p ? `${typeof p.lbs === "number" ? `${p.lbs} × ` : ""}${typeof p.reps === "number" ? p.reps : "fail"}` : "–"}</span>
           ${weighted ? `<input class="cell${isTop ? " top" : ""}" data-cell="lbs" data-at="${i}:${s}" type="number" inputmode="decimal" aria-label="Set ${labels[s]} pounds"
               value="${typeof r.lbs === "number" ? r.lbs : ""}" placeholder="${typeof w === "number" ? w : "lbs"}">` : ""}
-          <input class="cell" data-cell="reps" data-at="${i}:${s}" type="number" inputmode="numeric" aria-label="Set ${labels[s]} ${amountHead[e.unit].toLowerCase()}" value="${r.reps}">
+          ${r.type === "failure"
+            ? `<span class="cell fail-cell" aria-label="Set ${labels[s]}: to failure, no rep count">Fail</span>`
+            : `<input class="cell" data-cell="reps" data-at="${i}:${s}" type="number" inputmode="numeric" aria-label="Set ${labels[s]} ${amountHead[e.unit].toLowerCase()}" value="${r.reps}">`}
           <button type="button" class="check" data-check="${i}:${s}" aria-pressed="${r.done}" aria-label="Set ${labels[s]} done">${CHECK_ICON}</button>
         </div>`;
       }).join("");
@@ -1276,8 +1306,9 @@ if (typeof document !== "undefined") {
     }).join("");
 
     $("clear-card").disabled = entries.length === 0;
-    $("add-toggle").hidden = entries.length === 0;
-    $("add-form").hidden = entries.length > 0 && !addOpen;
+    $("add-toggle").hidden = entries.length === 0 || addOpen;
+    $("add-form").hidden = !addOpen;
+    renderNewWorkout();
     const noLifts = myLifts.length === 0;
     $("lift-field").hidden = noLifts;
     if (noLifts) openAddPicker(true);
@@ -1314,8 +1345,9 @@ if (typeof document !== "undefined") {
     if (resetValues) {
       loadType = BAR_LIKE.includes(lift.equip) ? "pct" : "lbs";
       const defaults = { weight: [loadType === "pct" ? 4 : 3, loadType === "pct" ? 5 : 10], reps: [3, 10], time: [3, 30], cardio: [1, 20] }[lift.kind];
-      form.sets.value = defaults[0];
       form.reps.value = defaults[1];
+      plan = Array.from({ length: defaults[0] }, () => ({ type: "normal", reps: defaults[1] }));
+      renderPlan();
       form.load.value = loadType === "pct" ? 75 : "";
     }
     setLoadType(loadType);
@@ -1427,7 +1459,7 @@ if (typeof document !== "undefined") {
       const entry = entries[Number(addSet.dataset.addset)];
       const last = entry.rows[entry.rows.length - 1];
       if (entry.rows.length >= 20) return;
-      entry.rows.push({ type: "normal", reps: last ? last.reps : entry.reps, lbs: last ? last.lbs ?? null : null, done: false });
+      entry.rows.push({ type: "normal", reps: last && typeof last.reps === "number" ? last.reps : entry.reps, lbs: last ? last.lbs ?? null : null, done: false });
       entry.sets = entry.rows.length;
       saveCard();
       renderToday();
@@ -1584,12 +1616,21 @@ if (typeof document !== "undefined") {
     const form = e.target;
     const lift = liftById(form.lift.value);
     const unit = unitFor(lift.kind);
-    const entry = newEntry(lift.id, lift.kind === "cardio" ? 1 : Number(form.sets.value), Number(form.reps.value), unit,
-      lift.kind === "weight" ? { type: loadType, value: Number(form.load.value) } : null);
-    const problems = Number(form.sets.value) >= 1 || lift.kind === "cardio" ? checkEntry(entry) : [["sets", "Sets must be 1 to 20."]];
+    const load = lift.kind === "weight" ? { type: loadType, value: Number(form.load.value) } : null;
+    const entry = lift.kind === "cardio"
+      ? newEntry(lift.id, 1, Number(form.reps.value), unit, null)
+      : entryFromPlan(lift.id, plan, unit, load);
+    const problems = checkEntry(entry);
 
     for (const name of ["sets", "reps", "load"]) form[name].removeAttribute("aria-invalid");
-    for (const [name] of problems) form[name].setAttribute("aria-invalid", "true");
+    for (const box of $("set-plan").querySelectorAll("[data-plan-reps]")) {
+      const r = plan[Number(box.dataset.planReps)];
+      box.toggleAttribute("aria-invalid", !inRange(r.reps, LIMITS[unit]));
+    }
+    for (const [name] of problems) {
+      if (name === "reps" && lift.kind !== "cardio") continue; // marked on the set rows above
+      form[name].setAttribute("aria-invalid", "true");
+    }
     $("add-error").textContent = problems.map((p) => p[1]).join(" ");
     if (problems.length) return;
 
@@ -1823,7 +1864,7 @@ if (typeof document !== "undefined") {
 
   function historyLine(l) {
     if (l.unit === "min") return `${l.reps} min`;
-    const base = `${l.sets} × ${l.reps}${l.unit === "sec" ? " sec" : ""}`;
+    const base = l.reps === "failure" ? `${l.sets} to failure` : `${l.sets} × ${l.reps}${l.unit === "sec" ? " sec" : ""}`;
     return typeof l.weight === "number" ? `${base} at <strong>${l.weight}</strong>` : base;
   }
 
@@ -2381,11 +2422,119 @@ if (typeof document !== "undefined") {
   let addOpen = false;
   let menuAt = null; // "entry:set" the set menu is open for
 
+  // ---------- New workout ----------
+  function renderNewWorkout() {
+    const btn = $("new-workout");
+    const hasCard = entries.length > 0;
+    btn.className = `${hasCard ? "secondary" : "primary"} new-workout${newArmed ? " armed" : ""}`;
+    $("new-workout-text").textContent = newArmed ? "Tap again to clear this card" : "New workout";
+    $("new-workout-bar").hidden = !hasCard && addOpen; // the form is already open on an empty card
+  }
+
+  function disarmNew() {
+    clearTimeout(newArmed);
+    newArmed = null;
+    renderNewWorkout();
+  }
+
+  function startNewWorkout() {
+    if (entries.length) {
+      // Something is on the card: ask once more before clearing it
+      if (!newArmed) {
+        newArmed = setTimeout(disarmNew, 4000);
+        return renderNewWorkout();
+      }
+      clearTimeout(newArmed);
+      newArmed = null;
+      commitPrevious();
+      entries = [];
+      cardRoutine = null;
+      save("liftday.cardRoutine", null);
+      endSession();
+      stopRest();
+      saveCard();
+    }
+    finishNote = "";
+    addOpen = true;
+    renderToday();
+    if (myLifts.length) $("lift").focus();
+    else { const box = document.querySelector("#add-picker input[type=search]"); if (box) box.focus(); }
+  }
+
+  $("new-workout").addEventListener("click", startNewWorkout);
+
+  // ---------- The set list in Add exercise ----------
+  function renderSetsSelect() {
+    $("sets-select").innerHTML = Array.from({ length: MAX_PLAN_SETS }, (_, i) =>
+      `<option value="${i + 1}">${i + 1} ${i === 0 ? "set" : "sets"}</option>`).join("");
+  }
+
+  function planUnitLabel() {
+    return $("add-form").dataset.kind === "time" ? "Seconds" : "Reps";
+  }
+
+  function defaultPlanReps() {
+    const last = [...plan].reverse().find((p) => typeof p.reps === "number");
+    return last ? last.reps : Number($("add-form").reps.value) || 5;
+  }
+
+  function renderPlan() {
+    $("sets-select").value = String(plan.length);
+    const labels = setLabels(plan);
+    const unit = planUnitLabel();
+    $("set-plan").innerHTML = `<div class="plan-head" aria-hidden="true"><span>Set</span><span>Type</span><span>${unit}</span></div>` +
+      plan.map((p, i) => `<div class="plan-row" role="listitem">
+        <span class="set-type t-${p.type}" aria-hidden="true">${labels[i]}</span>
+        <select data-plan-type="${i}" aria-label="Set ${i + 1} type">
+          ${PLAN_TYPES.map(([v, t]) => `<option value="${v}"${p.type === v ? " selected" : ""}>${t}</option>`).join("")}
+          <option value="remove"${plan.length === 1 ? " disabled" : ""}>Remove set</option>
+        </select>
+        ${p.type === "failure"
+          ? `<span class="cell fail-cell plan-fail">Until you can't</span>`
+          : `<input class="cell" data-plan-reps="${i}" type="number" inputmode="numeric" min="1" value="${p.reps}" aria-label="Set ${i + 1} ${unit.toLowerCase()}">`}
+      </div>`).join("");
+  }
+
+  $("sets-select").addEventListener("change", (e) => {
+    const n = Number(e.target.value);
+    while (plan.length < n) plan.push({ type: "normal", reps: defaultPlanReps() });
+    plan.length = n;
+    renderPlan();
+  });
+
+  $("set-plan").addEventListener("change", (e) => {
+    const sel = e.target.closest("[data-plan-type]");
+    if (!sel) return;
+    const i = Number(sel.dataset.planType);
+    if (sel.value === "remove") {
+      if (plan.length > 1) plan.splice(i, 1);
+    } else {
+      const p = plan[i];
+      p.type = sel.value;
+      if (p.type === "failure") p.reps = null;
+      else if (typeof p.reps !== "number") p.reps = defaultPlanReps();
+    }
+    renderPlan();
+    const again = $("set-plan").querySelector(`[data-plan-type="${Math.min(i, plan.length - 1)}"]`);
+    if (again) again.focus();
+  });
+
+  // Typing reps doesn't redraw the list, so the cursor stays put
+  $("set-plan").addEventListener("input", (e) => {
+    const box = e.target.closest("[data-plan-reps]");
+    if (!box) return;
+    plan[Number(box.dataset.planReps)].reps = box.value === "" ? null : Number(box.value);
+    box.removeAttribute("aria-invalid");
+  });
+
+  renderSetsSelect();
+  renderPlan();
+
   $("add-toggle").addEventListener("click", () => {
-    addOpen = !$("add-form").hidden ? false : true;
-    $("add-form").hidden = !addOpen;
-    $("add-toggle").setAttribute("aria-expanded", addOpen);
-    if (addOpen) $("lift").focus();
+    addOpen = true;
+    $("add-toggle").setAttribute("aria-expanded", "true");
+    renderCard();
+    if (myLifts.length) $("lift").focus();
   });
 
   function openSetMenu(at) {
@@ -2405,7 +2554,7 @@ if (typeof document !== "undefined") {
     const e = entries[i];
     const pick = ev.target.closest("[data-settype]");
     if (pick) {
-      e.rows[s].type = pick.dataset.settype;
+      changeSetType(e, e.rows[s], pick.dataset.settype);
     } else if (ev.target.closest("[data-remove-set]")) {
       e.rows.splice(s, 1);
       if (!e.rows.length) entries.splice(i, 1); // last set gone: the exercise goes too
