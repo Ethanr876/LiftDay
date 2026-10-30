@@ -287,6 +287,29 @@ for (const [label, got, expected] of rowsTests) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length;
+// ---------- Setup + rank-ups ----------
+const ru = R.rankUp;
+const last = [
+  ["rest defaults to 2:30", R.REST_DEFAULT, 150],
+  ["5 ft 11 in = 71 in", R.heightInches(5, 11), 71],
+  ["6 ft = 72 in", R.heightInches(6, 0), 72],
+  ["12 inches isn't valid", R.heightInches(5, 12), null],
+  ["9 ft isn't a height", R.heightInches(9, 0), null],
+  ["height text", R.heightText(71), "5 ft 11 in"],
+  ["first rank ever counts", JSON.stringify(ru({ lifts: {} }, { overall: 2, lifts: { bench: 2 } })), JSON.stringify({ kind: "overall", id: "overall", index: 2 })],
+  ["no change = no celebration", ru({ overall: 3, lifts: { bench: 3 } }, { overall: 3, lifts: { bench: 3 } }), null],
+  ["going down = no celebration", ru({ overall: 4, lifts: { bench: 4 } }, { overall: 3, lifts: { bench: 3 } }), null],
+  ["biggest rank-up wins (squat to Titan over overall Gold)", ru({ overall: 2, lifts: { squat: 6, bench: 2 } }, { overall: 3, lifts: { squat: 7, bench: 2 } }).id, "squat"],
+  ["tie goes to overall", ru({ overall: 4, lifts: { bench: 4 } }, { overall: 5, lifts: { bench: 5 } }).kind, "overall"],
+  ["tiers: Silver pop, Gold rays, Diamond shockwave, Titan confetti", [2, 3, 5, 7, 8].map(R.celebrationTier).join(), "0,1,2,3,3"],
+];
+for (const [label, got, expected] of last) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);

@@ -81,3 +81,16 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Set menu and "Make this a routine?"** are bottom sheets (`<dialog>`), sliding up 240ms ease-out (none with reduced motion). The routine name is pre-filled ("Bench Press + Dumbbell Curl") and selected.
 - **Add exercise** folds away after you add one, behind a gold "Add exercise" button. Routines list under it with Start / Delete; the one on today's card has a gold border.
 - Editing a cell never redraws the table (so focus stays where you tapped); only the stage and totals update live.
+
+## Rank-up celebration
+
+Full-screen overlay (navy at 88%), the new badge, the rank name in its color, what ranked up, and "Let's go". The badge pops with a strong ease-out and a built-in overshoot (scale 0.4 to 1.08 to 1, 640ms); the title and lines rise in after it, staggered 100ms. It gets louder by tier:
+
+| Tier | Ranks | Adds |
+| --- | --- | --- |
+| 0 | Wood, Bronze, Silver | Pop only, short buzz |
+| 1 | Gold, Platinum | Slow-turning light rays (SVG, 22% opacity), 12 sparks bursting out, PR sound |
+| 2 | Diamond, Champion | White flash, two shockwave rings in the rank color, 20 sparks, bigger badge |
+| 3 | Titan, Olympian | Breathing halo, a third ring, 28 sparks, 44 pieces of confetti (prismatic for Olympian), longest buzz |
+
+Closes itself after 5 to 8 seconds. Reduced motion: everything fades, no rays, rings, sparks or confetti. Personal side only.

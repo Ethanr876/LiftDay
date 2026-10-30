@@ -34,12 +34,12 @@ The tab bar sits at the bottom of the screen.
 1. Pick **Just me** (personal training) or **My team**. You can switch later.
    - **My team → Coach:** name your team, pick its lifts, then build workouts (see Teams below).
    - **My team → Player:** paste the team link or code your coach sent you, or just open the link.
-2. **Pick your lifts.** The app starts empty. You see recommended lifts first; type in the search box to find anything else, or tap a muscle group. Every lift has a picture of the movement. Tap **+** to add it.
-3. Personal only: add your bodyweight, your maxes (tap **Estimate** if you don't know one), and your gym (bar weight and the plates you own). Every step can be skipped.
+2. Personal: enter your **height and weight**, then your **gym** (bar weight and the plates you own). Coaches name their team. Every step can be skipped.
+3. The app starts with no lifts. You **pick lifts when you build a workout**: in **Add exercise**, search the library (or use the recommended ones). Every lift has a picture of the movement. Set maxes any time in Profile (tap **Estimate** if you don't know one).
 
 **Building a workout (Workout tab)**
 
-1. Tap **Add exercise**, pick a lift, choose **how many sets**, the reps, and the weight (% of max or lbs). Tap **Add to workout**.
+1. Tap **Add exercise**. Pick one of your lifts, or tap **Search all lifts** to find a new one (it's added to your list), choose **how many sets**, the reps, and the weight (% of max or lbs). Tap **Add to workout**.
 2. Each exercise shows a table: **Set · Previous · Lbs · Reps · ✓**. Type a different weight or reps into any set. **Previous** shows what you did last time for that set.
 3. **Add set** adds another set (copying the last one).
 4. **Tap a set number** to change it: **Warm-up** (W), **Normal** (numbered), **Failure** (F), **Drop set** (D), or **Remove set**. Warm-ups don't count toward volume or your top set.
@@ -54,7 +54,7 @@ The tab bar sits at the bottom of the screen.
    - holds and carries (plank, farmers walk): sets and seconds
    - cardio (treadmill, bike, rower, stairmaster): minutes
 2. The big number at the top is your **next set**. Barbell lifts show the loaded bar and the plates per side; everything else shows the movement picture.
-3. Lift, then tap **Set done, start rest**. The rest timer counts down (90 seconds to start; -15 / +15 changes it and it remembers). At zero it says GO, buzzes and beeps.
+3. Lift, then tap **Set done, start rest**. The rest timer counts down (2:30 to start, enough to recover between heavy sets; -15 / +15 changes it and it remembers). At zero it says GO, buzzes and beeps.
 4. Tap any numbered circle to check off or undo a set.
 5. Personal: tap **Finish and save day** to log it in **History**. Raise a max on **Me** and you get a **New PR** banner and a line in your PR log.
 
@@ -65,6 +65,8 @@ The tab bar sits at the bottom of the screen.
 **Card done:** you see your total volume as something real ("9,575 lbs, about 3 hippos") with a **Share it** button.
 
 **Ranks (personal):** Wood, Bronze, Silver, Gold, Platinum, Diamond, Champion, Titan, Olympian, for squat, bench, deadlift and overhead press, plus an overall rank. Each lift shows your bodyweight multiple, roughly what share of lifters you're stronger than, and the exact weight you need for the next rank. Men's or women's standards.
+
+**Rank-up celebrations (personal):** the first time you earn a rank, or any time a lift or your overall rank goes up, a celebration plays. It gets bigger as you climb: Wood to Silver, the badge pops in; Gold and Platinum add spinning light rays and sparks; Diamond and Champion add a flash and shockwave rings; Titan and Olympian add a breathing glow and confetti in the rank's colors. Tap **Let's go** (or anywhere) to close. With "reduce motion" on, it just fades in.
 
 **PR sound (personal, in Profile):** an airhorn or a bell (or off) plus a big vibration when you set a PR.
 
@@ -122,7 +124,7 @@ To check the math and search, run the test with Node:
 node tests/math-test.js
 ```
 
-It runs 146 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, their own weights, warm-ups left out of volume), volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
+It runs 158 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
 
 ## Files
 
@@ -145,6 +147,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2:** game-day look, plates per side on an animated barbell, set check-off, rest timer, pound-for-pound + PRs
 - [x] **m2.5:** Personal vs Team, personal setup (max estimator, home gym, history), 460-lift library with search and pictures
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
+- [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines
 - [x] **m2.7:** bottom tab bar (Home, Workout, Ranks/Team, Profile), rank badges, muscle recovery map, fun features personal-only
 - [ ] **m3 (Nov 13):** lbs / kg, auto warm-up sets, status update #2, **feature freeze**

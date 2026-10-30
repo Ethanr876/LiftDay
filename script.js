@@ -11,12 +11,13 @@ const ROUND_TO = 5; // lbs: a pair of 2.5s is the smallest jump on a standard ba
 const BAR = 45; // lbs
 const PLATES = [45, 35, 25, 10, 5, 2.5]; // a standard US weight room, heaviest first
 const BAR_OPTIONS = [45, 35, 15]; // standard, women's/shorter, technique bar
-const REST_DEFAULT = 90; // seconds
+const REST_DEFAULT = 150; // seconds: 2:30 between sets
 const PLATE_LIFTS = ["barbell"]; // equipment that gets the loaded-bar drawing
 
 const LIMITS = {
   max: [45, 1500], // a max can't be lighter than the empty bar
   bodyweight: [80, 500],
+  height: [36, 96], // inches (3 ft to 8 ft)
   sets: [1, 20],
   reps: [1, 50],
   sec: [5, 600],
@@ -227,6 +228,16 @@ function isValidBodyweight(value) {
   return inRange(value, LIMITS.bodyweight);
 }
 
+// Height from feet + inches. 5 ft 11 in -> 71. Returns null if it isn't a real height.
+function heightInches(feet, inches) {
+  const total = Number(feet) * 12 + Number(inches || 0);
+  return Number.isFinite(total) && inRange(total, LIMITS.height) && Number(inches || 0) < 12 ? total : null;
+}
+
+function heightText(total) {
+  return total ? `${Math.floor(total / 12)} ft ${total % 12} in` : "";
+}
+
 function checkEstimate(weight, reps) {
   const problems = [];
   if (!inRange(weight, LIMITS.estimateWeight)) problems.push("Enter the weight you lifted.");
@@ -388,6 +399,25 @@ function overallRank(ranks) {
   return { rank: RANKS[index], index, lifts: r.length };
 }
 
+// Did anything rank up? before/after: { overall: index | undefined, lifts: { id: index } }.
+// Returns the biggest new rank (the overall rank wins a tie), or null. A first-ever rank counts.
+function rankUp(before, after) {
+  const ups = [];
+  if (after.overall !== undefined && (before.overall === undefined || after.overall > before.overall)) ups.push({ kind: "overall", id: "overall", index: after.overall });
+  for (const [id, idx] of Object.entries(after.lifts || {})) {
+    const was = (before.lifts || {})[id];
+    if (was === undefined || idx > was) ups.push({ kind: "lift", id, index: idx });
+  }
+  if (!ups.length) return null;
+  return ups.sort((a, b) => b.index - a.index || (a.kind === "overall" ? -1 : 1))[0];
+}
+
+// How big the celebration is: 0 = pop (Wood-Silver), 1 = rays (Gold-Platinum),
+// 2 = shockwave (Diamond-Champion), 3 = confetti (Titan-Olympian)
+function celebrationTier(index) {
+  return index >= 7 ? 3 : index >= 5 ? 2 : index >= 3 ? 1 : 0;
+}
+
 // ---------- Fun volume comparisons ----------
 // Rough real-world weights in lbs (averages; real animals vary a lot).
 const THINGS = [
@@ -546,7 +576,7 @@ if (typeof module !== "undefined") {
     SET_TYPES, rowWeight, setLabels, newEntry, freshCopy, routineNameFor,
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
-    encodeTeam, decodeTeam, cardSignature, ghostSetsAt, RECOVERY, musclesFor, recoveryStatus, hoursText,
+    encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText,
   };
 }
 
@@ -560,6 +590,7 @@ if (typeof document !== "undefined") {
   let maxes = load("liftday.maxes", {});
   let entries = load("liftday.card", []).map(normEntry);
   let bodyweight = load("liftday.bodyweight", null);
+  let height = load("liftday.height", null); // inches
   let restSeconds = load("liftday.rest", REST_DEFAULT);
   let gym = load("liftday.gym", { bar: BAR, plates: [...PLATES] });
   let customLifts = load("liftday.lifts", []).map((l) => ({ group: "My lifts", equip: "other", pattern: "stand", kind: "weight", ...l }));
@@ -671,9 +702,9 @@ if (typeof document !== "undefined") {
   // =================================================================
 
   const setupSteps = () => {
-    if (isPersonal()) return ["bw", "lifts", "maxes", "gym"];
+    if (isPersonal()) return ["bw", "gym"];
     if (pendingTeam && role === "player") return ["join"];
-    if (role === "coach") return ["role", "teamname", "lifts"];
+    if (role === "coach") return ["role", "teamname"];
     if (role === "player") return ["role", "join"];
     return ["role"];
   };
@@ -705,13 +736,9 @@ if (typeof document !== "undefined") {
     const last = setupStep === steps.length - 1;
     const content = {
       bw: {
-        title: "Your bodyweight",
-        why: "Used to show your pound-for-pound strength (your max divided by your bodyweight). Optional.",
-        body: `<div class="max-row bw-row">
-            <label for="ob-bw">Bodyweight</label>
-            <input id="ob-bw" class="bw-input" type="number" inputmode="numeric" min="80" max="500" placeholder="lbs" value="${bodyweight || ""}">
-            <span></span>
-          </div>`,
+        title: "About you",
+        why: "Your height and weight. Bodyweight powers your pound-for-pound strength and your ranks. Both are optional and stay on this phone.",
+        body: heightWeightHTML("ob"),
       },
       lifts: {
         title: "Pick your lifts",
@@ -746,7 +773,7 @@ if (typeof document !== "undefined") {
       },
       teamname: {
         title: "Create your team",
-        why: "Players see this name when they join. You'll build workouts next, then share a link.",
+        why: "Players see this name when they join. You'll build workouts on the Workout tab, then share a link.",
         body: `<div class="stack">
             <label class="field"><span>Team name</span><input id="team-name" maxlength="40" placeholder="Edinboro O-Line" value="${escapeHTML((team && team.name) || "")}"></label>
             <label class="field"><span>Your name (shown to players)</span><input id="coach-name" maxlength="40" placeholder="Coach Smith" value="${escapeHTML((team && team.coach) || "")}"></label>
@@ -945,6 +972,17 @@ if (typeof document !== "undefined") {
       return renderResults(el);
     }
     const pick = e.target.closest("[data-pick]");
+    if (pick && el.id === "add-picker") {
+      const id = pick.dataset.pick;
+      if (!myLifts.includes(id)) { myLifts.push(id); afterLiftsChanged(); }
+      $("lift-field").hidden = false;
+      $("lift").value = id;
+      setFormFor(liftById(id), true);
+      openAddPicker(false);
+      $("lift-count-note").textContent = `${liftName(id)} picked.`;
+      $("lifts-count").textContent = myLifts.length;
+      return;
+    }
     if (pick) {
       const id = pick.dataset.pick;
       if (myLifts.includes(id)) {
@@ -1051,9 +1089,8 @@ if (typeof document !== "undefined") {
         ? `<p class="done-msg">Empty card</p>
            <p class="stage-label">Add today's lifts below, or try a sample day to see how it works. Your next set shows up here.</p>
            <button type="button" class="secondary sample" id="sample-day">Try a sample day</button>`
-        : `<p class="done-msg">No lifts yet</p>
-           <p class="stage-label">Pick the lifts you do first. Then build today's card and Lift Day walks you through every set.</p>
-           <button type="button" class="primary sample" id="go-pick">Pick your lifts</button>`;
+        : `<p class="done-msg">Let's lift</p>
+           <p class="stage-label">Build today's workout: add an exercise below and pick your lifts as you go. Lift Day walks you through every set.</p>`;
       lastBarKey = null;
       return;
     }
@@ -1239,8 +1276,11 @@ if (typeof document !== "undefined") {
     }).join("");
 
     $("clear-card").disabled = entries.length === 0;
-    $("add-toggle").hidden = myLifts.length === 0;
-    $("add-form").hidden = myLifts.length === 0 || (entries.length > 0 && !addOpen);
+    $("add-toggle").hidden = entries.length === 0;
+    $("add-form").hidden = entries.length > 0 && !addOpen;
+    const noLifts = myLifts.length === 0;
+    $("lift-field").hidden = noLifts;
+    if (noLifts) openAddPicker(true);
     renderRoutines();
   }
 
@@ -1343,8 +1383,7 @@ if (typeof document !== "undefined") {
       }
     } else if (e.target.closest(".need-max-stage")) {
       goToMax(e.target.closest(".need-max-stage").dataset.lift);
-    } else if (e.target.closest("#go-pick")) {
-      goToLifts();
+
     } else if (e.target.closest("#sample-day")) {
       entries = sampleDay();
       saveCard();
@@ -1594,6 +1633,7 @@ if (typeof document !== "undefined") {
       ? maxRowsHTML("me")
       : `<div class="empty-box"><p class="empty-title">No weighted lifts yet</p><p class="hint">Add lifts under My lifts below. Any that use weights show up here so you can set a max.</p></div>`;
     $("bodyweight").value = bodyweight || "";
+    $("me-height").innerHTML = heightWeightHTML("me").split('<div class="max-row bw-row">')[0];
     updateRatios();
   }
 
@@ -1626,6 +1666,7 @@ if (typeof document !== "undefined") {
     if (before && value > before) logPR(lift, value, value - before);
     updateRatios();
     renderToday();
+    checkRankUp();
   }
 
   // Typing in a max box
@@ -2130,6 +2171,7 @@ if (typeof document !== "undefined") {
       if (before && est > before) logPR(lift.id, est, est - before, true);
     }
     quickStatus(msg + ".");
+    checkRankUp();
     input.value = "";
     if (nextSet(entries, maxes, step(), bar())) startRest();
     renderToday();
@@ -2230,6 +2272,7 @@ if (typeof document !== "undefined") {
     if (!sx) return;
     sex = sx.dataset.sex;
     save("liftday.sex", sex);
+    syncRanks();
     renderRanks();
   });
 
@@ -2391,7 +2434,155 @@ if (typeof document !== "undefined") {
   });
 
 
+  // =================================================================
+  // Height + weight inputs (setup and Profile)
+  // =================================================================
+
+  function heightWeightHTML(prefix) {
+    const ft = height ? Math.floor(height / 12) : "";
+    const inch = height ? height % 12 : "";
+    return `<div class="max-row hw-row">
+        <span class="hw-label" id="${prefix}-h-label">Height</span>
+        <div class="hw-pair" role="group" aria-labelledby="${prefix}-h-label">
+          <label><input class="h-ft" type="number" inputmode="numeric" min="3" max="8" value="${ft}" aria-label="Feet"><span>ft</span></label>
+          <label><input class="h-in" type="number" inputmode="numeric" min="0" max="11" value="${inch}" aria-label="Inches"><span>in</span></label>
+        </div>
+      </div>
+      <div class="max-row bw-row">
+        <label for="${prefix}-bw">Bodyweight</label>
+        <input id="${prefix}-bw" class="bw-input" type="number" inputmode="numeric" min="80" max="500" placeholder="lbs" value="${bodyweight || ""}">
+        <span></span>
+      </div>`;
+  }
+
+  document.addEventListener("input", (e) => {
+    if (!e.target.classList.contains("h-ft") && !e.target.classList.contains("h-in")) return;
+    const box = e.target.closest(".hw-pair");
+    const ft = box.querySelector(".h-ft").value;
+    const inch = box.querySelector(".h-in").value;
+    if (!ft) { height = null; save("liftday.height", null); return showStatus("Saved."); }
+    const h = heightInches(ft, inch);
+    if (h === null) return showStatus("Enter a height between 3 ft and 8 ft (inches 0 to 11).");
+    height = h;
+    showSaved(save("liftday.height", height));
+  });
+
+  // =================================================================
+  // Picking a lift inside Add exercise (search the whole library)
+  // =================================================================
+
+  function openAddPicker(show) {
+    const el = $("add-picker");
+    el.hidden = !show;
+    $("find-lift").setAttribute("aria-expanded", show);
+    $("find-lift").textContent = show ? "Close search" : "Search all lifts";
+    if (show && !el.innerHTML) renderPicker("add-picker");
+  }
+
+  $("find-lift").addEventListener("click", () => {
+    const show = $("add-picker").hidden;
+    openAddPicker(show);
+    if (show) $("add-picker").querySelector(".lift-search").focus();
+  });
+
+  // =================================================================
+  // Rank-up celebration: bigger the higher you climb (personal only)
+  // =================================================================
+
+  let rankState = load("liftday.rankState", null);
+
+  function currentRanks() {
+    const state = { lifts: {} };
+    if (!bodyweight) return state;
+    const rows = rankRows().filter((r) => r.r);
+    for (const r of rows) state.lifts[r.id] = r.r.index;
+    const overall = overallRank(rows.map((r) => r.r));
+    if (overall) state.overall = overall.index;
+    return state;
+  }
+
+  function syncRanks() {
+    rankState = currentRanks();
+    save("liftday.rankState", rankState);
+  }
+
+  function checkRankUp() {
+    if (!isPersonal()) return;
+    const now = currentRanks();
+    const up = rankUp(rankState || { lifts: {} }, now);
+    rankState = now;
+    save("liftday.rankState", rankState);
+    if (up) celebrate(up);
+  }
+
+  // Ranks change when a max, bodyweight or estimated max changes
+  document.addEventListener("change", (e) => {
+    if (e.target.classList.contains("max-input") || e.target.classList.contains("bw-input") || e.target.id === "bodyweight") checkRankUp();
+  });
+
+  let celebrateTimer = null;
+  function celebrate(up) {
+    const tier = celebrationTier(up.index);
+    const name = RANKS[up.index];
+    const colors = BADGE_COLORS[up.index];
+    const what = up.kind === "overall" ? "Overall rank" : `${liftName(up.id)} rank`;
+    const best = up.kind === "lift" ? Math.max(maxes[up.id] || 0, bests[up.id] || 0) : 0;
+
+    let fx = "";
+    if (tier >= 1) {
+      const rays = Array.from({ length: 16 }, (_, i) => {
+        const a = (Math.PI * 2 * i) / 16;
+        const b = a + Math.PI / 32;
+        return `<polygon points="200,200 ${200 + 400 * Math.cos(a)},${200 + 400 * Math.sin(a)} ${200 + 400 * Math.cos(b)},${200 + 400 * Math.sin(b)}"/>`;
+      }).join("");
+      fx += `<svg class="ru-rays" viewBox="0 0 400 400" aria-hidden="true"><g fill="${colors[1]}">${rays}</g></svg>`;
+      const n = tier === 1 ? 12 : tier === 2 ? 20 : 28;
+      fx += `<div class="ru-sparks" aria-hidden="true">${Array.from({ length: n }, (_, i) => {
+        const a = (Math.PI * 2 * i) / n + Math.random() * 0.3;
+        const d = 110 + Math.random() * (60 + tier * 30);
+        return `<i style="--dx:${(Math.cos(a) * d).toFixed(0)}px;--dy:${(Math.sin(a) * d).toFixed(0)}px;--c:${colors[i % 3]};animation-delay:${(Math.random() * 120).toFixed(0)}ms"></i>`;
+      }).join("")}</div>`;
+    }
+    if (tier >= 2) fx += `<div class="ru-flash" aria-hidden="true"></div><div class="ru-rings" aria-hidden="true"><span></span><span></span>${tier >= 3 ? "<span></span>" : ""}</div>`;
+    if (tier >= 3) {
+      const pal = up.index === 8 ? ["#ffe9a8", "#ff9ad5", "#9ad0ff", "#b6ffd9", "#ffffff"] : [...colors, "#ffffff", "#f3b62a"];
+      fx += `<div class="ru-halo" aria-hidden="true"></div><div class="ru-confetti" aria-hidden="true">${Array.from({ length: 44 }, (_, i) => `<i style="--x:${(Math.random() * 100).toFixed(1)}vw;--drift:${(Math.random() * 30 - 15).toFixed(0)}vw;--rot:${(Math.random() * 720 - 360).toFixed(0)}deg;--c:${pal[i % pal.length]};animation-delay:${(Math.random() * 700).toFixed(0)}ms;animation-duration:${(1800 + Math.random() * 1200).toFixed(0)}ms"></i>`).join("")}</div>`;
+    }
+
+    const el = $("rankup");
+    el.className = `rankup tier-${tier} rank-${name.toLowerCase()}`;
+    el.innerHTML = `${fx}
+      <div class="ru-card">
+        <div class="ru-badge">${rankBadgeSVG(up.index, "badge-hero")}</div>
+        <p class="ru-rank">${name}</p>
+        <p class="ru-sub">${what}${best ? ` · ${best} lbs` : ""}</p>
+        <p class="ru-sub small">${up.index === 8 ? "The top rank. Nothing left to unlock." : `Next up: ${RANKS[up.index + 1]}`}</p>
+        <button type="button" class="primary ru-ok" id="rankup-ok">Let's go</button>
+      </div>`;
+    el.hidden = false;
+    $("rankup-ok").focus();
+    if (navigator.vibrate) navigator.vibrate([[80], [100, 50, 100], [150, 60, 150, 60, 300], [200, 80, 200, 80, 200, 80, 500]][tier]);
+    if (tier >= 1) playHype();
+    clearTimeout(celebrateTimer);
+    celebrateTimer = setTimeout(closeRankUp, 5000 + tier * 1000);
+    renderRanks();
+  }
+
+  function closeRankUp() {
+    clearTimeout(celebrateTimer);
+    const el = $("rankup");
+    if (el.hidden) return;
+    el.classList.add("leaving");
+    setTimeout(() => { el.hidden = true; el.innerHTML = ""; el.className = "rankup"; }, 220);
+  }
+
+  $("rankup").addEventListener("click", (e) => {
+    if (e.target.closest("#rankup-ok") || !e.target.closest(".ru-card")) closeRankUp();
+  });
+  document.addEventListener("keydown", (e) => { if (e.key === "Escape") closeRankUp(); });
+
   // ---------- Start ----------
+  if (!rankState) syncRanks();
   if (pendingTeam && !(role === "coach")) {
     // Opened a coach's team link: go straight to joining it
     if (!mode) { mode = "team"; save("liftday.mode", mode); }
