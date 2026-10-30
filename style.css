@@ -1180,3 +1180,163 @@ h2 { font-size: 1.0625rem; }
 @media (min-width: 40rem) {
   .rank-ladder { grid-template-columns: repeat(5, 1fr); }
 }
+
+/* =====================================================================
+   Workout builder: exercise cards with a set table, set menu, routines
+   ===================================================================== */
+
+.card { margin-top: 1rem; display: grid; gap: 0.75rem; }
+
+.ex {
+  padding: 0.75rem;
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--navy-800);
+}
+
+.ex-head { display: grid; grid-template-columns: 3rem 1fr 2.75rem; align-items: center; gap: 0.75rem; }
+.ex-head .lift-name { color: var(--gold); }
+.ex-head .need-max { padding: 0; font-size: inherit; }
+
+.set-table { margin-top: 0.625rem; }
+
+.set-row {
+  display: grid;
+  grid-template-columns: 2.75rem 1fr 4.75rem 4rem 2.75rem;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.25rem;
+  border-radius: 6px;
+  transition: background-color 150ms ease;
+}
+
+.no-lbs .set-row { grid-template-columns: 2.75rem 1fr 4.5rem 2.75rem; }
+
+.set-headrow { color: var(--soft); font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.04em; }
+.set-headrow > span:first-child { text-align: center; }
+.set-headrow > span:nth-child(3), .set-headrow > span:nth-child(4) { text-align: center; }
+.set-headrow svg { width: 1.125rem; height: 1.125rem; justify-self: center; }
+
+.set-row.done { background: rgba(243, 182, 42, 0.12); }
+
+.set-type {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid transparent;
+  border-radius: 6px;
+  background: var(--navy-700);
+  color: var(--white);
+  font: inherit;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.set-row.next .set-type { border-color: var(--gold); }
+.set-type.t-warmup { color: #f6c445; }
+.set-type.t-failure { color: var(--red); }
+.set-type.t-drop { color: #8fc3ff; }
+.set-type.t-remove { color: var(--red); }
+.set-type svg { width: 1.125rem; height: 1.125rem; }
+
+.prev { color: var(--soft); font-size: 0.9375rem; font-variant-numeric: tabular-nums; text-align: center; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+.cell {
+  min-height: 2.5rem;
+  padding: 0 0.25rem;
+  text-align: center;
+  font-size: 1.0625rem;
+  background: var(--navy-900);
+}
+
+.cell.top { color: var(--gold); }
+
+.check {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border: 2px solid var(--line);
+  border-radius: 6px;
+  background: none;
+  color: var(--soft);
+  cursor: pointer;
+  transition: background-color 150ms ease, border-color 150ms ease, color 150ms ease, transform 120ms var(--ease-out);
+}
+
+.check svg { width: 1.25rem; height: 1.25rem; }
+.check:active { transform: scale(0.94); }
+.check[aria-pressed="true"] { background: var(--gold); border-color: var(--gold); color: var(--gold-ink); }
+
+.add-set {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.375rem;
+  width: 100%;
+  min-height: 2.75rem;
+  margin-top: 0.5rem;
+  border: 0;
+  border-radius: 6px;
+  background: var(--navy-700);
+  color: var(--white);
+  font: inherit;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.add-set svg, .add-toggle svg { width: 1.125rem; height: 1.125rem; }
+
+.add-toggle { display: flex; align-items: center; justify-content: center; gap: 0.5rem; margin-top: 1.25rem; }
+.add-toggle[hidden] { display: none; }
+
+.routine.current { border-color: var(--gold); }
+
+/* Bottom sheets (set menu, make-a-routine) */
+.sheet {
+  width: min(32rem, 100%);
+  max-width: 100%;
+  margin: auto auto 0;
+  padding: 1rem 1rem calc(1rem + env(safe-area-inset-bottom));
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 14px 14px 0 0;
+  background: var(--navy-800);
+  color: var(--white);
+}
+
+.sheet[open] { animation: sheet-up 240ms var(--ease-out); }
+.sheet::backdrop { background: rgba(5, 10, 22, 0.6); }
+
+@keyframes sheet-up { from { transform: translateY(100%); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .sheet[open] { animation: none; }
+}
+
+.sheet-title { margin: 0 0 0.5rem; color: var(--soft); font-weight: 700; }
+.sheet-title.big { color: var(--white); font-family: var(--jersey); font-weight: 900; font-size: 2rem; line-height: 1; text-transform: uppercase; }
+
+.sheet-opt {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+  width: 100%;
+  min-height: 3.25rem;
+  padding: 0 0.25rem;
+  border: 0;
+  border-bottom: 1px solid var(--line);
+  background: none;
+  color: var(--white);
+  font: inherit;
+  font-weight: 700;
+  font-size: 1.0625rem;
+  text-align: left;
+  cursor: pointer;
+}
+
+.sheet-opt[aria-current="true"] .set-type { border-color: var(--gold); }
+.sheet-opt.danger { color: var(--red); }
+.sheet-cancel { width: 100%; margin-top: 0.75rem; }
+.sheet .field input { margin-top: 0.25rem; }

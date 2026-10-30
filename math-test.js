@@ -256,6 +256,37 @@ for (const [label, got, expected] of rec) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length;
+// ---------- Per-set rows: warm-up, normal, failure, drop ----------
+const ex = R.newEntry("squat", 3, 5, "reps", { type: "pct", value: 80 });
+ex.rows.unshift({ type: "warmup", reps: 5, lbs: 135, done: true });
+ex.rows[1].done = true;                                   // first working set at 80% of 315 = 250
+ex.rows[3].type = "drop"; ex.rows[3].lbs = 205; ex.rows[3].reps = 8; ex.rows[3].done = true;
+const sum = R.daySummary([ex], { squat: 315 });
+const rowsTests = [
+  ["labels: W, 1, 2, D", R.setLabels(ex.rows).join(","), "W,1,2,D"],
+  ["failure set labeled F", R.setLabels([{ type: "normal" }, { type: "failure" }]).join(","), "1,F"],
+  ["row uses its own lbs", R.rowWeight(ex, ex.rows[0], { squat: 315 }), 135],
+  ["row without lbs uses 80% of max", R.rowWeight(ex, ex.rows[1], { squat: 315 }), 250],
+  ["volume skips warm-up: 5x250 + 8x205", sum.volume, 5 * 250 + 8 * 205],
+  ["sets done counts warm-up too", sum.sets, 3],
+  ["top weight ignores the 135 warm-up", R.topWeights([ex], { squat: 315 }).squat, 250],
+  ["next set is the 2nd working set", R.nextSet([ex], { squat: 315 }).setIndex, 2],
+  ["scheme shows the warm-up", R.schemeText(ex), "1 warm-up + 3 × 5 at 80%"],
+  ["fresh copy unchecks every set", R.freshCopy([ex])[0].rows.every((r) => !r.done), true],
+  ["fresh copy keeps set types", R.freshCopy([ex])[0].rows.map((r) => r.type).join(), "warmup,normal,normal,drop"],
+  ["routine name from lifts", R.routineNameFor([ex, { lift: "bench" }], (id) => ({ squat: "Squat", bench: "Bench Press" }[id])), "Squat + Bench Press"],
+  ["routine name, many lifts", R.routineNameFor([{ lift: "a" }, { lift: "b" }, { lift: "c" }], (id) => id.toUpperCase()), "A + 2 more"],
+  ["bad set type rejected", R.checkEntry({ ...ex, rows: [{ type: "mega", reps: 5, lbs: null }] }).length > 0, true],
+  ["team link keeps per-set rows", R.decodeTeam(R.encodeTeam({ name: "T", routines: [{ name: "Mon", lines: R.freshCopy([ex]) }] })).routines[0].lines[0].rows[3].type, "drop"],
+  ["changing a set changes the ghost signature", R.cardSignature([ex]) === R.cardSignature(R.freshCopy([{ ...ex, rows: ex.rows.slice(1) }])), false],
+];
+for (const [label, got, expected] of rowsTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);

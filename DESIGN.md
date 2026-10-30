@@ -73,3 +73,11 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Rank badges** (`figures.js`, `rankBadgeSVG`): a hexagon with a star that gains a ring (Silver), a spiked rim (Gold, bigger at Platinum), wings (Diamond, bigger at Champion), a star crest (Titan) and a prismatic gradient (Olympian). Ranks you haven't reached show grayscale and dimmed on the ladder.
 - **Recovery map** (`bodyMapSVG`): front view, muscle regions filled green `#4fd18b`, yellow `#f6c445`, red `#ff6b5e`. Next to it a legend; under it a list sorted by what needs the most rest.
 - **Personal only:** ranks, ghost race, animal comparisons, PR sound. Team keeps a plain "New PR" banner.
+
+## Workout builder
+
+- **Exercise card:** picture, name in gold, scheme line, remove X. Under it a set table: Set · Previous · Lbs · Reps · check (Lbs hidden for bodyweight, timed and cardio lifts). Inputs are dark wells; the computed weight shows as the placeholder until you type your own.
+- **Set badge:** a 40px rounded square. Normal sets are numbered; W (amber), F (red), D (light blue). The next set to do gets a gold outline; done rows get a faint gold wash and a filled gold check.
+- **Set menu and "Make this a routine?"** are bottom sheets (`<dialog>`), sliding up 240ms ease-out (none with reduced motion). The routine name is pre-filled ("Bench Press + Dumbbell Curl") and selected.
+- **Add exercise** folds away after you add one, behind a gold "Add exercise" button. Routines list under it with Start / Delete; the one on today's card has a gold border.
+- Editing a cell never redraws the table (so focus stays where you tapped); only the stage and totals update live.

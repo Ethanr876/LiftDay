@@ -37,6 +37,15 @@ The tab bar sits at the bottom of the screen.
 2. **Pick your lifts.** The app starts empty. You see recommended lifts first; type in the search box to find anything else, or tap a muscle group. Every lift has a picture of the movement. Tap **+** to add it.
 3. Personal only: add your bodyweight, your maxes (tap **Estimate** if you don't know one), and your gym (bar weight and the plates you own). Every step can be skipped.
 
+**Building a workout (Workout tab)**
+
+1. Tap **Add exercise**, pick a lift, choose **how many sets**, the reps, and the weight (% of max or lbs). Tap **Add to workout**.
+2. Each exercise shows a table: **Set · Previous · Lbs · Reps · ✓**. Type a different weight or reps into any set. **Previous** shows what you did last time for that set.
+3. **Add set** adds another set (copying the last one).
+4. **Tap a set number** to change it: **Warm-up** (W), **Normal** (numbered), **Failure** (F), **Drop set** (D), or **Remove set**. Warm-ups don't count toward volume or your top set.
+5. Tap **✓** when a set is done. Rest starts automatically.
+6. Tap **Finish workout**. If you built it yourself, it asks **"Make this a routine?"** Name it and it's saved under **My routines** on the Workout tab, ready to **Start** next time. (Coaches: it's saved as a team workout instead.)
+
 **Lift day**
 
 1. On **Today**, pick a lift and fill in the line. The form changes with the lift:
@@ -113,7 +122,7 @@ To check the math and search, run the test with Node:
 node tests/math-test.js
 ```
 
-It runs 130 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
+It runs 146 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, their own weights, warm-ups left out of volume), volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
 
 ## Files
 
@@ -136,6 +145,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2:** game-day look, plates per side on an animated barbell, set check-off, rest timer, pound-for-pound + PRs
 - [x] **m2.5:** Personal vs Team, personal setup (max estimator, home gym, history), 460-lift library with search and pictures
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
+- [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines
 - [x] **m2.7:** bottom tab bar (Home, Workout, Ranks/Team, Profile), rank badges, muscle recovery map, fun features personal-only
 - [ ] **m3 (Nov 13):** lbs / kg, auto warm-up sets, status update #2, **feature freeze**
 - [ ] **m4 (Nov 16):** edge cases, phone polish, accessibility pass

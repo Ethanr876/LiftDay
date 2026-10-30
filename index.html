@@ -63,8 +63,12 @@
 
         <div class="finish" id="finish-area"></div>
 
+        <button type="button" class="primary add-toggle" id="add-toggle" aria-expanded="false" aria-controls="add-form">
+          <svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M12 5v14M5 12h14"/></svg>Add exercise
+        </button>
+
         <form class="add" id="add-form" novalidate>
-          <h2>Add to the card</h2>
+          <h2>Add exercise</h2>
           <div class="fields">
             <label class="field lift">
               <span>Lift</span>
@@ -91,8 +95,10 @@
             </div>
           </div>
           <p class="error" id="add-error" role="alert"></p>
-          <button type="submit" class="primary">Add to card</button>
+          <button type="submit" class="primary">Add to workout</button>
         </form>
+
+        <div id="routines-area"></div>
 
         <div class="card-actions">
           <button type="button" class="quiet" id="edit-lifts">Edit my lifts</button>
@@ -155,6 +161,29 @@
       </section>
     </main>
   </div>
+
+  <!-- Set type menu (tap a set number) -->
+  <dialog class="sheet" id="set-menu" aria-labelledby="set-menu-title">
+    <p class="sheet-title" id="set-menu-title">Set</p>
+    <button type="button" class="sheet-opt" data-settype="warmup"><span class="set-type t-warmup">W</span>Warm-up set</button>
+    <button type="button" class="sheet-opt" data-settype="normal"><span class="set-type t-normal">1</span>Normal set</button>
+    <button type="button" class="sheet-opt" data-settype="failure"><span class="set-type t-failure">F</span>Failure set</button>
+    <button type="button" class="sheet-opt" data-settype="drop"><span class="set-type t-drop">D</span>Drop set</button>
+    <button type="button" class="sheet-opt danger" data-remove-set><span class="set-type t-remove"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M6 6l12 12M18 6L6 18"/></svg></span>Remove set</button>
+    <button type="button" class="secondary sheet-cancel" data-menu-close>Cancel</button>
+  </dialog>
+
+  <!-- Make this a routine? -->
+  <dialog class="sheet" id="routine-dialog" aria-labelledby="routine-title">
+    <p class="sheet-title big" id="routine-title">Make this a routine?</p>
+    <p class="hint" id="routine-why"></p>
+    <label class="field"><span>Routine name</span><input id="routine-name-input" maxlength="30"></label>
+    <p class="error" id="routine-error" role="alert"></p>
+    <div class="ob-actions">
+      <button type="button" class="secondary" id="routine-skip">Not now</button>
+      <button type="button" class="primary" id="routine-save">Save routine</button>
+    </div>
+  </dialog>
 
   <script src="lifts.js"></script>
   <script src="figures.js"></script>

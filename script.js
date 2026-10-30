@@ -156,13 +156,24 @@ function liftIdFromName(name) {
 }
 
 // ---------- Card lines ----------
-// A line on the card: { lift, sets, reps, unit: "reps" | "sec" | "min", load: { type: "pct" | "lbs", value } | null, done: [] }
-// "reps" holds the seconds or minutes for timed lifts.
+// A line on the card (one exercise):
+//   { lift, unit: "reps" | "sec" | "min", reps, load: { type: "pct" | "lbs", value } | null,
+//     rows: [{ type: "normal" | "warmup" | "failure" | "drop", reps, lbs, done }] }
+// Each row is one set. A row's lbs is null when it uses the exercise's load (e.g. 75% of your max).
+// "reps" holds the seconds or minutes for timed lifts. sets = rows.length.
 
-// Cards saved by older versions used { sets, reps, pct }.
-function normEntry(e) {
-  if (e.load !== undefined) return e;
-  return { ...e, unit: "reps", load: e.pct !== undefined ? { type: "pct", value: e.pct } : null };
+const SET_TYPES = ["warmup", "normal", "failure", "drop"];
+const SET_LETTER = { warmup: "W", failure: "F", drop: "D" };
+
+// Older saved cards used { sets, reps, pct } or { sets, reps, load, done: [] }. Turn them into rows.
+function normEntry(raw) {
+  let e = raw;
+  if (e.load === undefined) e = { ...e, unit: "reps", load: e.pct !== undefined ? { type: "pct", value: e.pct } : null };
+  if (!Array.isArray(e.rows)) {
+    const done = Array.isArray(e.done) ? e.done : [];
+    e = { ...e, rows: Array.from({ length: e.sets || 1 }, (_, i) => ({ type: "normal", reps: e.reps, lbs: null, done: Boolean(done[i]) })) };
+  }
+  return { ...e, unit: e.unit || "reps", sets: e.rows.length };
 }
 
 // The unit and load a lift kind uses
@@ -170,12 +181,24 @@ function unitFor(kind) {
   return { weight: "reps", reps: "reps", time: "sec", cardio: "min" }[kind] || "reps";
 }
 
-// Weight for one line: a number, null when it needs a max you haven't entered, undefined when it has no weight.
+// Weight for the whole exercise: a number, null when it needs a max you haven't entered, undefined when it has no weight.
 function entryWeight(entry, maxes, step = ROUND_TO, bar = BAR) {
   const e = normEntry(entry);
   if (!e.load) return undefined;
   if (e.load.type === "lbs") return e.load.value;
   return maxes[e.lift] ? setWeight(maxes[e.lift], e.load.value, step, bar) : null;
+}
+
+// Weight for one set: the number typed in that row, or the exercise's weight.
+function rowWeight(entry, row, maxes, step = ROUND_TO, bar = BAR) {
+  if (typeof row.lbs === "number") return row.lbs;
+  return entryWeight(entry, maxes, step, bar);
+}
+
+// Set labels: warm-ups are W, failure F, drop D, and normal sets are numbered 1, 2, 3...
+function setLabels(rows) {
+  let n = 0;
+  return rows.map((r) => SET_LETTER[r.type] || String(++n));
 }
 
 function inRange(value, [low, high]) {
@@ -186,12 +209,13 @@ function inRange(value, [low, high]) {
 function checkEntry(entry) {
   const e = normEntry(entry);
   const problems = [];
-  const unit = e.unit || "reps";
+  const unit = e.unit;
   const label = { reps: "Reps must be 1 to 50.", sec: "Seconds must be 5 to 600.", min: "Minutes must be 1 to 180." }[unit];
-  if (unit !== "min" && !inRange(e.sets, LIMITS.sets)) problems.push(["sets", "Sets must be 1 to 20."]);
-  if (!inRange(e.reps, LIMITS[unit])) problems.push(["reps", label]);
+  if (unit !== "min" && !inRange(e.rows.length, LIMITS.sets)) problems.push(["sets", "Sets must be 1 to 20."]);
+  if (!inRange(e.reps, LIMITS[unit]) || e.rows.some((r) => !inRange(r.reps, LIMITS[unit]))) problems.push(["reps", label]);
   if (e.load && e.load.type === "pct" && !inRange(e.load.value, LIMITS.pct)) problems.push(["load", "Percent must be 1 to 120."]);
   if (e.load && e.load.type === "lbs" && !inRange(e.load.value, LIMITS.lbs)) problems.push(["load", "Weight must be 1 to 1500 lbs."]);
+  if (e.rows.some((r) => !SET_TYPES.includes(r.type) || (r.lbs !== null && r.lbs !== undefined && !inRange(r.lbs, [0, 1500])))) problems.push(["load", "A set has a weight or type that doesn't fit."]);
   return problems;
 }
 
@@ -210,13 +234,17 @@ function checkEstimate(weight, reps) {
   return problems;
 }
 
-// The heaviest weight on the card for each lift (the "top set").
+// The heaviest working set on the card for each lift (the "top set"). Warm-ups don't count.
 function topWeights(entries, maxes, step = ROUND_TO, bar = BAR) {
   const tops = {};
-  for (const e of entries) {
-    const w = entryWeight(e, maxes, step, bar);
-    if (typeof w !== "number") continue;
-    if (!(e.lift in tops) || w > tops[e.lift]) tops[e.lift] = w;
+  for (const raw of entries) {
+    const e = normEntry(raw);
+    for (const r of e.rows) {
+      if (r.type === "warmup") continue;
+      const w = rowWeight(e, r, maxes, step, bar);
+      if (typeof w !== "number") continue;
+      if (!(e.lift in tops) || w > tops[e.lift]) tops[e.lift] = w;
+    }
   }
   return tops;
 }
@@ -226,17 +254,18 @@ function allSets(entries, maxes, step = ROUND_TO, bar = BAR) {
   const sets = [];
   entries.forEach((raw, entryIndex) => {
     const e = normEntry(raw);
-    for (let s = 0; s < e.sets; s++) {
+    e.rows.forEach((r, s) => {
       sets.push({
         entryIndex,
         setIndex: s,
         lift: e.lift,
-        reps: e.reps,
+        reps: r.reps,
         unit: e.unit,
-        weight: entryWeight(e, maxes, step, bar),
-        done: Boolean(e.done && e.done[s]),
+        type: r.type,
+        weight: rowWeight(e, r, maxes, step, bar),
+        done: Boolean(r.done),
       });
-    }
+    });
   });
   return sets;
 }
@@ -246,31 +275,58 @@ function nextSet(entries, maxes, step = ROUND_TO, bar = BAR) {
 }
 
 // What you actually did today, for the history log.
-// Volume = weight x reps, added up over every weighted set you checked off.
+// Volume = weight x reps over every working set you checked off (warm-ups don't count).
 function daySummary(entries, maxes, step = ROUND_TO, bar = BAR) {
   const lines = [];
   let sets = 0;
   let volume = 0;
   for (const raw of entries) {
     const e = normEntry(raw);
-    const doneCount = (e.done || []).filter(Boolean).length;
-    if (!doneCount) continue;
-    const weight = entryWeight(e, maxes, step, bar);
-    if (weight === null) continue; // needed a max that was never entered
-    lines.push({ lift: e.lift, sets: doneCount, reps: e.reps, unit: e.unit, weight });
-    sets += doneCount;
-    if (typeof weight === "number" && e.unit === "reps") volume += doneCount * e.reps * weight;
+    const done = e.rows.filter((r) => r.done);
+    if (!done.length) continue;
+    const weights = done.map((r) => rowWeight(e, r, maxes, step, bar));
+    if (weights.some((w) => w === null)) continue; // needed a max that was never entered
+    const top = weights.some((w) => typeof w === "number") ? Math.max(...weights.filter((w) => typeof w === "number")) : undefined;
+    lines.push({ lift: e.lift, sets: done.length, reps: done[done.length - 1].reps, unit: e.unit, weight: top });
+    sets += done.length;
+    done.forEach((r, i) => {
+      if (r.type !== "warmup" && typeof weights[i] === "number" && e.unit === "reps") volume += r.reps * weights[i];
+    });
   }
   return { lines, sets, volume };
 }
 
-// How a line reads: "4 × 5 at 75%", "3 × 12", "3 × 45 sec", "20 min"
+// How a line reads: "4 × 5 at 75%", "3 × 12", "3 × 45 sec", "20 min", "1 warm-up + 3 × 5 at 75%"
 function schemeText(entry) {
   const e = normEntry(entry);
-  if (e.unit === "min") return `${e.reps} min`;
-  const base = `${e.sets} × ${e.reps}${e.unit === "sec" ? " sec" : ""}`;
+  if (e.unit === "min") return `${e.rows[0] ? e.rows[0].reps : e.reps} min`;
+  const warm = e.rows.filter((r) => r.type === "warmup").length;
+  const work = e.rows.length - warm;
+  const sameReps = e.rows.every((r) => r.reps === e.rows[0].reps);
+  const repText = sameReps && e.rows.length ? e.rows[0].reps : e.reps;
+  const base = `${warm ? `${warm} warm-up + ` : ""}${work} × ${repText}${e.unit === "sec" ? " sec" : ""}`;
   if (!e.load) return base;
   return e.load.type === "pct" ? `${base} at ${e.load.value}%` : `${base} at ${e.load.value} lbs`;
+}
+
+// A blank exercise with n sets
+function newEntry(lift, sets, reps, unit, load) {
+  return { lift, unit, reps, load, rows: Array.from({ length: sets }, () => ({ type: "normal", reps, lbs: null, done: false })), sets };
+}
+
+// The same exercises with every set unchecked (for routines and the next workout)
+function freshCopy(entries) {
+  return entries.map((raw) => {
+    const e = normEntry(raw);
+    return { lift: e.lift, unit: e.unit, reps: e.reps, load: e.load, rows: e.rows.map((r) => ({ type: r.type, reps: r.reps, lbs: r.lbs ?? null, done: false })), sets: e.rows.length };
+  });
+}
+
+// The default name for a new routine: "Squat + Bench Press", or "Squat + 3 more"
+function routineNameFor(entries, nameOf) {
+  const names = [...new Set(entries.map((e) => nameOf(e.lift)))];
+  if (!names.length) return "My routine";
+  return names.length <= 2 ? names.join(" + ") : `${names[0]} + ${names.length - 1} more`;
 }
 
 // ---------- Ranks (Wood to Olympian) ----------
@@ -420,7 +476,7 @@ function decodeTeam(input) {
 function cardSignature(entries) {
   return entries.map((raw) => {
     const e = normEntry(raw);
-    return `${e.lift}:${e.sets}x${e.reps}${e.unit}:${e.load ? e.load.type + e.load.value : "-"}`;
+    return `${e.lift}:${e.rows.map((r) => `${r.type[0]}${r.reps}${r.lbs ?? ""}`).join(".")}${e.unit}:${e.load ? e.load.type + e.load.value : "-"}`;
   }).join("|");
 }
 
@@ -487,6 +543,7 @@ if (typeof module !== "undefined") {
   module.exports = {
     roundToLoadable, loadStep, setWeight, platesPerSide, loadedWeight, estimateMax, bodyweightRatio,
     buildLibrary, normalize, searchLifts, checkLiftName, liftIdFromName, normEntry, unitFor, entryWeight,
+    SET_TYPES, rowWeight, setLabels, newEntry, freshCopy, routineNameFor,
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
     encodeTeam, decodeTeam, cardSignature, ghostSetsAt, RECOVERY, musclesFor, recoveryStatus, hoursText,
@@ -515,6 +572,9 @@ if (typeof document !== "undefined") {
   let session = load("liftday.session", null); // today's sets as you do them: { start, sets: [] }
   let sex = load("liftday.sex", "men"); // which strength standards to rank against
   let hype = load("liftday.hype", "airhorn"); // PR sound: airhorn | bell | off
+  let routines = load("liftday.routines", []); // your saved routines: [{ name, lines }]
+  let cardRoutine = load("liftday.cardRoutine", null); // the routine today's card came from, if any
+  let previous = load("liftday.previous", {}); // last time's sets per lift: { lift: [{ lbs, reps }] }
   let muscleLog = load("liftday.muscles", {}); // last time each muscle group was trained: { group: { at, heavy } }
   let pendingTeam = typeof location !== "undefined" ? decodeTeam(location.hash) : null; // opened a team link
   let joinPreview = pendingTeam;
@@ -542,10 +602,6 @@ if (typeof document !== "undefined") {
   let finishNote = "";
   let loadType = "pct";
 
-  // Cards saved before check-offs existed get an empty "done" list
-  for (const e of entries) {
-    if (!Array.isArray(e.done) || e.done.length !== e.sets) e.done = Array(e.sets).fill(false);
-  }
 
   const $ = (id) => document.getElementById(id);
   const reduceMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -1008,8 +1064,8 @@ if (typeof document !== "undefined") {
         ${fun ? `<p class="fun">You moved <strong>${vol.toLocaleString()} lbs</strong> today. That's ${fun.text}.</p>
           <button type="button" class="secondary" id="share-volume">Share it</button>` : ""}
         <p class="stage-label">${isPersonal()
-          ? "Every set is checked off. Tap Finish and save day to log it on Home."
-          : "Every set is checked off. Clear the card when you're ready for the next lift day."}</p>
+          ? "Every set is checked off. Tap Finish workout to log it on Home."
+          : "Every set is checked off. Tap Finish workout when you're done."}</p>
         <p class="status" id="share-status" aria-live="polite"></p>`;
       lastBarKey = null;
       stopGhostTick();
@@ -1139,47 +1195,61 @@ if (typeof document !== "undefined") {
 
   function renderCard() {
     const tops = topWeights(entries, maxes, step(), bar());
-    const marked = {};
     const ns = nextSet(entries, maxes, step(), bar());
+    const amountHead = { reps: "Reps", sec: "Sec", min: "Min" };
 
     $("card").innerHTML = entries.map((e, i) => {
       const lift = liftById(e.lift);
-      const w = entryWeight(e, maxes, step(), bar());
-      let right = "";
-      if (typeof w === "number") {
-        const isTop = w === tops[e.lift] && !marked[e.lift];
-        if (isTop) marked[e.lift] = true;
-        right = `<span class="weight${isTop ? " top" : ""}">${w}</span>`;
-      } else if (w === null) {
-        right = `<button type="button" class="need-max" data-lift="${e.lift}">Add max</button>`;
-      }
-      const chips = e.done.map((done, s) => {
+      const labels = setLabels(e.rows);
+      const weighted = lift.kind === "weight" || e.load;
+      const prev = previous[e.lift] || [];
+      const def = entryWeight(e, maxes, step(), bar());
+      const head = `<div class="ex-head">
+          ${figureSVG(lift.pattern, lift.equip, "row-fig")}
+          <div class="row-text">
+            <span class="lift-name">${lift.name}</span>
+            <span class="scheme">${schemeText(e)}${def === null ? ` · <button type="button" class="need-max" data-lift="${e.lift}">add your max</button>` : ""}</span>
+          </div>
+          <button type="button" class="remove" data-index="${i}" aria-label="Remove ${lift.name}">${X_ICON}</button>
+        </div>`;
+      const rows = e.rows.map((r, s) => {
+        const w = rowWeight(e, r, maxes, step(), bar());
         const isNext = ns && ns.entryIndex === i && ns.setIndex === s;
-        return `<button type="button" class="chip${isNext ? " next" : ""}" data-entry="${i}" data-set="${s}"
-          aria-pressed="${done}" aria-label="${lift.name} set ${s + 1} of ${e.sets}${done ? ", done" : ""}">${done ? CHECK_ICON : s + 1}</button>`;
+        const isTop = typeof w === "number" && r.type !== "warmup" && w === tops[e.lift];
+        const p = prev[s];
+        return `<div class="set-row${r.done ? " done" : ""}${isNext ? " next" : ""}" role="row">
+          <button type="button" class="set-type t-${r.type}" data-menu="${i}:${s}" aria-label="Set ${labels[s]}, ${r.type === "normal" ? "normal set" : r.type + " set"}. Change set type">${labels[s]}</button>
+          <span class="prev">${p ? `${typeof p.lbs === "number" ? `${p.lbs} × ` : ""}${p.reps}` : "–"}</span>
+          ${weighted ? `<input class="cell${isTop ? " top" : ""}" data-cell="lbs" data-at="${i}:${s}" type="number" inputmode="decimal" aria-label="Set ${labels[s]} pounds"
+              value="${typeof r.lbs === "number" ? r.lbs : ""}" placeholder="${typeof w === "number" ? w : "lbs"}">` : ""}
+          <input class="cell" data-cell="reps" data-at="${i}:${s}" type="number" inputmode="numeric" aria-label="Set ${labels[s]} ${amountHead[e.unit].toLowerCase()}" value="${r.reps}">
+          <button type="button" class="check" data-check="${i}:${s}" aria-pressed="${r.done}" aria-label="Set ${labels[s]} done">${CHECK_ICON}</button>
+        </div>`;
       }).join("");
-      return `<li class="row">
-        ${figureSVG(lift.pattern, lift.equip, "row-fig")}
-        <div class="row-text">
-          <span class="lift-name">${lift.name}</span>
-          <span class="scheme">${schemeText(e)}</span>
+      return `<li class="ex${weighted ? "" : " no-lbs"}">
+        ${head}
+        <div class="set-table" role="table" aria-label="${lift.name} sets">
+          <div class="set-row set-headrow" role="row">
+            <span>Set</span><span>Previous</span>${weighted ? "<span>Lbs</span>" : ""}<span>${amountHead[e.unit]}</span><span class="sr-only">Done</span>${CHECK_ICON}
+          </div>
+          ${rows}
         </div>
-        ${right || "<span></span>"}
-        <button type="button" class="remove" data-index="${i}" aria-label="Remove ${lift.name} ${schemeText(e)}">${X_ICON}</button>
-        <div class="chips">${chips}</div>
+        ${e.unit === "min" ? "" : `<button type="button" class="add-set" data-addset="${i}">${PLUS_ICON}Add set</button>`}
       </li>`;
     }).join("");
 
     $("clear-card").disabled = entries.length === 0;
+    $("add-toggle").hidden = myLifts.length === 0;
+    $("add-form").hidden = myLifts.length === 0 || (entries.length > 0 && !addOpen);
+    renderRoutines();
   }
 
   // Personal: save what you did to History
   function renderFinish() {
     const area = $("finish-area");
-    if (!isPersonal()) { area.innerHTML = ""; return; }
     const summary = daySummary(entries, maxes, step(), bar());
     area.innerHTML = summary.sets
-      ? `<button type="button" class="primary finish-btn" id="finish-day">Finish and save day</button>
+      ? `<button type="button" class="primary finish-btn" id="finish-day">Finish workout</button>
          <p class="hint center">${summary.sets} ${summary.sets === 1 ? "set" : "sets"} done${summary.volume ? ` · ${summary.volume.toLocaleString()} lbs total volume` : ""}</p>`
       : finishNote ? `<p class="hint center">${finishNote}</p>` : "";
   }
@@ -1191,7 +1261,6 @@ if (typeof document !== "undefined") {
     const select = $("lift");
     const current = select.value;
     const mine = myLiftObjects();
-    $("add-form").hidden = mine.length === 0;
     select.innerHTML = mine.map((l) => `<option value="${l.id}">${l.name}</option>`).join("");
     if (mine.some((l) => l.id === current)) select.value = current;
     setFormFor(liftById(select.value), select.value !== current);
@@ -1255,7 +1324,7 @@ if (typeof document !== "undefined") {
   $("stage").addEventListener("click", (e) => {
     if (e.target.closest("#set-done")) {
       const ns = nextSet(entries, maxes, step(), bar());
-      entries[ns.entryIndex].done[ns.setIndex] = true;
+      entries[ns.entryIndex].rows[ns.setIndex].done = true;
       saveCard();
       recordSet(ns.lift, typeof ns.weight === "number" ? ns.weight : null, ns.reps, ns.unit);
       if (nextSet(entries, maxes, step(), bar())) startRest();
@@ -1291,24 +1360,37 @@ if (typeof document !== "undefined") {
       const unit = unitFor(l.kind);
       const isBar = l.kind === "weight" && BAR_LIKE.includes(l.equip);
       const sets = l.kind === "cardio" ? 1 : 3;
-      return {
-        lift: l.id, sets, unit,
-        reps: { weight: isBar ? 5 : 10, reps: 10, time: 30, cardio: 20 }[l.kind],
-        load: l.kind === "weight" ? (isBar ? { type: "pct", value: 75 } : { type: "lbs", value: 25 }) : null,
-        done: Array(sets).fill(false),
-      };
+      return newEntry(l.id, sets, { weight: isBar ? 5 : 10, reps: 10, time: 30, cardio: 20 }[l.kind], unit,
+        l.kind === "weight" ? (isBar ? { type: "pct", value: 75 } : { type: "lbs", value: 25 }) : null);
     });
   }
 
   $("card").addEventListener("click", (e) => {
-    const chip = e.target.closest(".chip");
-    if (chip) {
-      const entry = entries[Number(chip.dataset.entry)];
-      const s = Number(chip.dataset.set);
-      entry.done[s] = !entry.done[s];
+    const check = e.target.closest("[data-check]");
+    if (check) {
+      const [i, s] = check.dataset.check.split(":").map(Number);
+      const entry = entries[i];
+      const row = entry.rows[s];
+      row.done = !row.done;
       saveCard();
-      if (entry.done[s]) recordSet(entry.lift, entryWeight(entry, maxes, step(), bar()) ?? null, entry.reps, entry.unit);
-      if (entry.done[s] && nextSet(entries, maxes, step(), bar())) startRest();
+      if (row.done) {
+        const w = rowWeight(entry, row, maxes, step(), bar());
+        recordSet(entry.lift, typeof w === "number" ? w : null, row.reps, entry.unit);
+        if (nextSet(entries, maxes, step(), bar())) startRest();
+      }
+      renderToday();
+      return;
+    }
+    const menu = e.target.closest("[data-menu]");
+    if (menu) return openSetMenu(menu.dataset.menu);
+    const addSet = e.target.closest("[data-addset]");
+    if (addSet) {
+      const entry = entries[Number(addSet.dataset.addset)];
+      const last = entry.rows[entry.rows.length - 1];
+      if (entry.rows.length >= 20) return;
+      entry.rows.push({ type: "normal", reps: last ? last.reps : entry.reps, lbs: last ? last.lbs ?? null : null, done: false });
+      entry.sets = entry.rows.length;
+      saveCard();
       renderToday();
       return;
     }
@@ -1325,21 +1407,133 @@ if (typeof document !== "undefined") {
 
   $("finish-area").addEventListener("click", (e) => {
     if (!e.target.closest("#finish-day")) return;
-    const summary = daySummary(entries, maxes, step(), bar());
-    history.unshift({ date: new Date().toISOString(), ...summary });
-    save("liftday.history", history);
-    saveGhost();
-    endSession();
-    for (const entry of entries) entry.done = Array(entry.sets).fill(false);
-    saveCard();
-    stopRest();
-    finishNote = "Saved to History. Your card is reset for next time.";
-    renderToday();
-    renderHistory();
+    // A workout you built yourself (not loaded from a routine): offer to keep it
+    if (!cardRoutine) return askRoutine();
+    finishWorkout();
   });
 
+  function finishWorkout(note = "") {
+    const summary = daySummary(entries, maxes, step(), bar());
+    if (isPersonal()) {
+      history.unshift({ date: new Date().toISOString(), ...summary });
+      save("liftday.history", history);
+    }
+    saveGhost();
+    commitPrevious();
+    endSession();
+    entries = freshCopy(entries);
+    saveCard();
+    stopRest();
+    finishNote = `${note}${isPersonal() ? "Saved to Home. " : ""}Your card is reset for next time.`;
+    renderToday();
+    renderHistory();
+  }
+
+  // Remember what you did so the Previous column can show it next time
+  function commitPrevious() {
+    for (const e of entries) {
+      const done = e.rows.filter((r) => r.done);
+      if (!done.length) continue;
+      previous[e.lift] = e.rows.map((r) => {
+        const w = rowWeight(e, r, maxes, step(), bar());
+        return r.done ? { lbs: typeof w === "number" ? w : null, reps: r.reps } : null;
+      });
+    }
+    save("liftday.previous", previous);
+  }
+
+  // ---------- "Make this a routine?" ----------
+  function askRoutine() {
+    const dlg = $("routine-dialog");
+    $("routine-title").textContent = role === "coach" && !isPersonal() ? "Save as a team workout?" : "Make this a routine?";
+    $("routine-why").textContent = role === "coach" && !isPersonal()
+      ? "Players get it the next time you send them the team link."
+      : "Save these exercises and sets so you can start this workout again with one tap.";
+    $("routine-name-input").value = routineNameFor(entries, liftName);
+    $("routine-error").textContent = "";
+    dlg.showModal();
+    $("routine-name-input").select();
+  }
+
+  $("routine-dialog").addEventListener("click", (e) => {
+    const dlg = $("routine-dialog");
+    if (e.target.closest("#routine-skip") || e.target === dlg) { dlg.close(); return finishWorkout(); }
+    if (!e.target.closest("#routine-save")) return;
+    const name = $("routine-name-input").value.trim().slice(0, 30);
+    if (!name) { $("routine-error").textContent = "Give it a name."; return; }
+    saveRoutine(name);
+    dlg.close();
+    finishWorkout(`Saved “${name}” as a routine. `);
+  });
+
+  $("routine-dialog").addEventListener("cancel", () => finishWorkout());
+
+  function saveRoutine(name) {
+    const lines = freshCopy(entries);
+    if (role === "coach" && !isPersonal() && team) {
+      team.routines = team.routines.filter((r) => r.name.toLowerCase() !== name.toLowerCase()).concat([{ name, lines }]);
+      team.custom = customLifts.filter((c) => team.routines.some((r) => r.lines.some((l) => l.lift === c.id)));
+      save("liftday.team", team);
+    } else {
+      routines = routines.filter((r) => r.name.toLowerCase() !== name.toLowerCase()).concat([{ name, lines }]);
+      save("liftday.routines", routines);
+    }
+    cardRoutine = name;
+    save("liftday.cardRoutine", cardRoutine);
+  }
+
+  // ---------- Your routines (start one with a tap) ----------
+  function renderRoutines() {
+    const el = $("routines-area");
+    const list = role === "coach" && !isPersonal() ? [] : routines; // coaches keep theirs on the Team tab
+    el.innerHTML = list.length
+      ? `<h2 class="gap">My routines</h2>
+         <ul class="routines">${list.map((r, i) => `<li class="routine${r.name === cardRoutine ? " current" : ""}">
+            <p class="routine-name">${escapeHTML(r.name)}</p>
+            <p class="hint small">${r.lines.map((l) => `${liftName(l.lift)} ${schemeText(l)}`).join(" · ")}</p>
+            <div class="routine-actions">
+              <button type="button" class="secondary" data-start-routine="${i}">${r.name === cardRoutine ? "Restart" : "Start"}</button>
+              <button type="button" class="quiet-x" data-delete-myroutine="${i}">Delete</button>
+            </div></li>`).join("")}</ul>`
+      : "";
+  }
+
+  $("routines-area").addEventListener("click", (e) => {
+    const start = e.target.closest("[data-start-routine]");
+    if (start) {
+      const r = routines[Number(start.dataset.startRoutine)];
+      loadLines(r.lines, r.name);
+      return;
+    }
+    const del = e.target.closest("[data-delete-myroutine]");
+    if (del) {
+      const r = routines.splice(Number(del.dataset.deleteMyroutine), 1)[0];
+      save("liftday.routines", routines);
+      if (r && r.name === cardRoutine) { cardRoutine = null; save("liftday.cardRoutine", null); }
+      renderRoutines();
+    }
+  });
+
+  function loadLines(lines, name) {
+    commitPrevious();
+    entries = freshCopy(lines);
+    for (const l of entries) if (!myLifts.includes(l.lift)) myLifts.push(l.lift);
+    save("liftday.myLifts", myLifts);
+    cardRoutine = name;
+    save("liftday.cardRoutine", cardRoutine);
+    endSession();
+    stopRest();
+    finishNote = "";
+    saveCard();
+    renderAll();
+    showTab($("tab-card"));
+  }
+
   $("clear-card").addEventListener("click", () => {
+    commitPrevious();
     entries = [];
+    cardRoutine = null;
+    save("liftday.cardRoutine", null);
     endSession();
     stopRest();
     saveCard();
@@ -1351,23 +1545,18 @@ if (typeof document !== "undefined") {
     const form = e.target;
     const lift = liftById(form.lift.value);
     const unit = unitFor(lift.kind);
-    const entry = {
-      lift: lift.id,
-      sets: lift.kind === "cardio" ? 1 : Number(form.sets.value),
-      reps: Number(form.reps.value),
-      unit,
-      load: lift.kind === "weight" ? { type: loadType, value: Number(form.load.value) } : null,
-    };
-    const problems = checkEntry(entry);
+    const entry = newEntry(lift.id, lift.kind === "cardio" ? 1 : Number(form.sets.value), Number(form.reps.value), unit,
+      lift.kind === "weight" ? { type: loadType, value: Number(form.load.value) } : null);
+    const problems = Number(form.sets.value) >= 1 || lift.kind === "cardio" ? checkEntry(entry) : [["sets", "Sets must be 1 to 20."]];
 
     for (const name of ["sets", "reps", "load"]) form[name].removeAttribute("aria-invalid");
     for (const [name] of problems) form[name].setAttribute("aria-invalid", "true");
     $("add-error").textContent = problems.map((p) => p[1]).join(" ");
     if (problems.length) return;
 
-    entry.done = Array(entry.sets).fill(false);
     entries.push(entry);
     finishNote = "";
+    addOpen = false;
     saveCard();
     renderToday();
   });
@@ -1786,13 +1975,7 @@ if (typeof document !== "undefined") {
     const load = e.target.closest("[data-load-routine]");
     if (load) {
       const r = team.routines[Number(load.dataset.loadRoutine)];
-      entries = r.lines.map((l) => ({ ...normEntry(l), done: Array(normEntry(l).sets).fill(false) }));
-      for (const l of r.lines) if (!myLifts.includes(l.lift)) myLifts.push(l.lift);
-      save("liftday.myLifts", myLifts);
-      endSession();
-      saveCard();
-      renderAll();
-      showTab($("tab-card"));
+      loadLines(r.lines, r.name);
       return;
     }
     const del = e.target.closest("[data-delete-routine]");
@@ -1829,7 +2012,7 @@ if (typeof document !== "undefined") {
     e.preventDefault();
     const name = $("routine-name").value.trim().slice(0, 30);
     if (!name) { $("team-status").textContent = "Give the workout a name."; return; }
-    const lines = entries.map((en) => { const { done, ...line } = normEntry(en); return line; });
+    const lines = freshCopy(entries);
     team.routines = team.routines.filter((r) => r.name.toLowerCase() !== name.toLowerCase()).concat([{ name, lines }]);
     team.custom = customLifts.filter((c) => team.routines.some((r) => r.lines.some((l) => l.lift === c.id)));
     save("liftday.team", team);
@@ -1923,11 +2106,16 @@ if (typeof document !== "undefined") {
     const unit = parsed.unit !== "reps" ? parsed.unit : unitFor(lift.kind);
 
     // Check off the next open set of that lift, or add a new line for it
-    const i = entries.findIndex((en) => en.lift === lift.id && en.done.includes(false));
+    const i = entries.findIndex((en) => en.lift === lift.id && en.rows.some((r) => !r.done));
     if (i >= 0) {
-      entries[i].done[entries[i].done.indexOf(false)] = true;
+      const row = entries[i].rows.find((r) => !r.done);
+      row.done = true;
+      row.reps = parsed.reps;
+      if (parsed.weight) row.lbs = parsed.weight;
     } else {
-      entries.push({ lift: lift.id, sets: 1, reps: parsed.reps, unit, load: parsed.weight ? { type: "lbs", value: parsed.weight } : null, done: [true] });
+      const added = newEntry(lift.id, 1, parsed.reps, unit, parsed.weight ? { type: "lbs", value: parsed.weight } : null);
+      added.rows[0].done = true;
+      entries.push(added);
       if (!myLifts.includes(lift.id)) { myLifts.push(lift.id); save("liftday.myLifts", myLifts); renderLiftPicker(); }
     }
     saveCard();
@@ -2142,6 +2330,66 @@ if (typeof document !== "undefined") {
     if (h) { hype = h.dataset.hype; save("liftday.hype", hype); renderHype(); return; }
     if (e.target.closest("#test-hype")) playHype();
   });
+
+  // =================================================================
+  // Workout builder: set-type menu, editing sets in the table, Add exercise
+  // =================================================================
+
+  let addOpen = false;
+  let menuAt = null; // "entry:set" the set menu is open for
+
+  $("add-toggle").addEventListener("click", () => {
+    addOpen = !$("add-form").hidden ? false : true;
+    $("add-form").hidden = !addOpen;
+    $("add-toggle").setAttribute("aria-expanded", addOpen);
+    if (addOpen) $("lift").focus();
+  });
+
+  function openSetMenu(at) {
+    menuAt = at;
+    const [i, s] = at.split(":").map(Number);
+    const e = entries[i];
+    const label = setLabels(e.rows)[s];
+    $("set-menu-title").textContent = `${liftName(e.lift)} · set ${label}`;
+    for (const b of $("set-menu").querySelectorAll("[data-settype]")) b.setAttribute("aria-current", b.dataset.settype === e.rows[s].type);
+    $("set-menu").showModal();
+  }
+
+  $("set-menu").addEventListener("click", (ev) => {
+    const dlg = $("set-menu");
+    if (ev.target === dlg || ev.target.closest("[data-menu-close]")) return dlg.close();
+    const [i, s] = menuAt.split(":").map(Number);
+    const e = entries[i];
+    const pick = ev.target.closest("[data-settype]");
+    if (pick) {
+      e.rows[s].type = pick.dataset.settype;
+    } else if (ev.target.closest("[data-remove-set]")) {
+      e.rows.splice(s, 1);
+      if (!e.rows.length) entries.splice(i, 1); // last set gone: the exercise goes too
+      else e.sets = e.rows.length;
+    } else return;
+    dlg.close();
+    saveCard();
+    renderToday();
+  });
+
+  // Typing a weight or reps into a set row
+  $("card").addEventListener("input", (ev) => {
+    const cell = ev.target.closest("[data-cell]");
+    if (!cell) return;
+    const [i, s] = cell.dataset.at.split(":").map(Number);
+    const row = entries[i].rows[s];
+    const v = cell.value === "" ? null : Number(cell.value);
+    if (cell.dataset.cell === "lbs") {
+      row.lbs = v !== null && v >= 0 && v <= 1500 ? v : null;
+    } else if (v !== null && v >= 1) {
+      row.reps = Math.min(v, entries[i].unit === "sec" ? 600 : entries[i].unit === "min" ? 180 : 50);
+    }
+    saveCard();
+    renderStage();
+    renderFinish();
+  });
+
 
   // ---------- Start ----------
   if (pendingTeam && !(role === "coach")) {
