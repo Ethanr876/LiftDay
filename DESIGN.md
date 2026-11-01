@@ -118,6 +118,13 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Calendar:** week streak and rest days on top, months with workout days as gold circles (today ringed), tap one to see that day's lifts.
 - Stats show in team mode too (they're plain numbers, no jokes or ranks).
 
+## Coach's live roster
+
+- **Join card** asks "Your name" above the gold Join button, with one line saying what the coach sees and that it goes through ntfy.sh. Join won't go without a name.
+- **Players** heading with a live pill on the right: green pulsing dot "Live", yellow "Connecting…", gray "Offline".
+- **Player card:** initial avatar, name, a status dot (green = lifting in the last 20 min, gold = finished, gray = idle) with "just now / 5 min ago", the current exercise and set in gold ("Squat · set 2 of 2"), a soft line with the workout, exercise x of y and sets done, and a thin gold progress bar. Tap to open: Workouts finished and Sets hit tiles, Progress (first → best weight, gain in green), Recent workouts (short ones in yellow), and a quiet Remove.
+- **Player's Team tab:** a card showing the name the coach sees, a Change form, and whether the last update reached the coach.
+
 ## Rank-up celebration
 
 Full-screen overlay (navy at 88%), the new badge, the rank name in its color, what ranked up, and "Let's go". The badge pops with a strong ease-out and a built-in overshoot (scale 0.4 to 1.08 to 1, 640ms); the title and lines rise in after it, staggered 100ms. It gets louder by tier:

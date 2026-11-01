@@ -77,17 +77,18 @@ The tab bar sits at the bottom of the screen.
 
 **Search tips:** shortcuts work, like `db` (dumbbell), `bb` (barbell), `kb` (kettlebell), `rdl`, `ohp`. "One arm", "one handed", "single arm" all find the same one-arm lifts.
 
-## Teams (no server)
+## Teams (coach watches live)
 
-Lift Day has no server, so the whole team lives in a link.
+The team itself lives in a link, and live progress goes through a free relay.
 
-1. The **coach** builds a workout on Today, then on the **Team** tab saves it with a name ("Monday lower"). Save as many as you want.
-2. The coach taps **Copy link** (or **Share**) and sends it to the team chat.
-3. A **player** opens the link (or pastes it), sees the team, coach and workouts, and taps **Join**. The team's lifts are added to their list.
-4. Players tap **Load to Today** on a workout, and every set's weight comes from *their own* maxes.
-5. When the coach changes workouts, they send the link again and players open it to update.
+1. The **coach** taps **Build a team workout** on the **Team** tab, adds lifts, sets and reps, and saves it with a name ("Monday lower").
+2. The coach taps **Copy link** (or **Share**) and sends it to the team chat. The link carries the workouts and the team's private channel.
+3. A **player** opens the link, sees the team, types **their name**, and taps **Join**.
+4. Players tap **Load to Today** on a workout; every set's weight comes from *their own* maxes.
+5. While a player lifts, the coach's **Players** list shows, live: which exercise and set they're on ("Squat · set 2 of 4"), exercise x of y, a progress bar of sets done, and when they finish ("Finished Monday power, 3 of 3 sets").
+6. Tap a player to see their **progress**: workouts finished, the share of assigned sets they actually hit, each lift's first and best weight, and their recent workouts (short ones in yellow).
 
-**What it can't do:** without a server, a player tapping Join can't send a request to the coach's phone, and the coach can't see a roster. That's on purpose: no accounts, and no player's name or maxes ever leave their phone. Real join requests would need online accounts and a database (Firebase or Supabase); see "Not in scope" below.
+**How live works (no server of ours):** each player's phone posts a small message to the team's channel on [ntfy.sh](https://ntfy.sh), a free public relay that needs no account or API key, so there are no secrets in this repo. A message holds only the player's name, the workout, the exercise and set numbers, and finished sets with top weights. The channel name is 24 random characters inside the coach's link. The relay keeps messages 12 hours, so a coach who opens the app later still catches up; the roster and progress then stay on the coach's phone. Anyone with the link could post to the channel, so incoming messages are checked and cleaned before they're shown.
 
 ## The lift library
 
@@ -110,7 +111,7 @@ Lift Day has no server, so the whole team lives in a link.
 
 ## Privacy
 
-There are no accounts and no server. Everything (your lifts, maxes, bodyweight, card, history) is saved in your own browser (localStorage) and never leaves your phone. Nothing personal is stored in this repo.
+There are no accounts and no server of ours. Everything (your lifts, maxes, bodyweight, card, history) is saved in your own browser (localStorage). The one exception is a team player's live progress (name, exercise, set numbers, finished sets), which goes through ntfy.sh to their coach. Nothing personal is stored in this repo.
 
 ## Running it yourself
 
@@ -125,7 +126,7 @@ To check the math and search, run the test with Node:
 node tests/math-test.js
 ```
 
-It runs 197 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, profile stats (week streaks, rest days, weekly and monthly totals, sets per muscle, per-lift history, the bodyweight log), their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
+It runs 211 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, profile stats (week streaks, rest days, weekly and monthly totals, sets per muscle, per-lift history, the bodyweight log), live team progress (channels, where a player is, reading and cleaning relay messages, replays not double-counted, hit rate and lift progress), their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
 
 ## Files
 
@@ -150,6 +151,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.14:** coach as overseer: players give their name when joining; live roster through ntfy.sh with each player's exercise, set and progress bar; player detail with sets-hit rate and lift progress
 - [x] **m2.13:** Profile dashboard like Hevy: header with workouts, week streak and volume; a 12-week chart (duration, volume, reps); Statistics (7-day front and back body graph, muscle distribution radar, set count per muscle by week, main exercises, monthly report); Exercises with per-lift history; Measurements (bodyweight over time); Calendar with streak and rest days
 - [x] **m2.12:** search-first Add exercise (no dropdown; done-before lifts lead the recommendations), coaches build team workouts on the Team tab, finishing a workout starts every worked muscle's recovery clock (personal and team), helper muscles
 - [x] **m2.11:** Get your rank calculator on the Ranks tab (maxes and estimates right there), Start a new routine (build and save a routine without logging a workout); sample day removed
@@ -160,7 +162,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [ ] **Nov 18:** "after" test with 5 lifters
 - [ ] **Nov 20:** final submission
 
-**Not in scope:** real join requests and team rosters, team leaderboards, team PR alerts, streaks, and racing a friend's ghost (all need a server and accounts, and would put teammates' personal data online); "Gym Tetris" equipment swapping; readiness/fatigue scores (a website can't read sleep data, and swapping lifts for joint pain is medical advice); Apple Watch haptics; video; writing programs for people.
+**Not in scope:** coach approval of join requests, team leaderboards, team PR alerts, streaks, and racing a friend's ghost (all need a server and accounts, and would put teammates' personal data online); "Gym Tetris" equipment swapping; readiness/fatigue scores (a website can't read sleep data, and swapping lifts for joint pain is medical advice); Apple Watch haptics; video; writing programs for people.
 
 ## How I'm measuring if it works
 

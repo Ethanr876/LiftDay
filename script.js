@@ -507,7 +507,7 @@ function fromBase64Url(code) {
 }
 
 function encodeTeam(team) {
-  return toBase64Url(JSON.stringify({ v: 1, name: team.name, coach: team.coach || "", routines: team.routines || [], custom: team.custom || [] }));
+  return toBase64Url(JSON.stringify({ v: 1, name: team.name, coach: team.coach || "", routines: team.routines || [], custom: team.custom || [], ch: team.ch || "" }));
 }
 
 // Accepts a full link or just the code. Returns a checked team, or null if it isn't a valid team link.
@@ -520,10 +520,91 @@ function decodeTeam(input) {
       if (typeof r.name !== "string" || !Array.isArray(r.lines) || r.lines.length > 30) return null;
       for (const l of r.lines) if (typeof l.lift !== "string" || checkEntry(l).length) return null;
     }
-    return { name: t.name.trim(), coach: String(t.coach || "").slice(0, 40), routines: t.routines, custom: Array.isArray(t.custom) ? t.custom : [] };
+    return { name: t.name.trim(), coach: String(t.coach || "").slice(0, 40), routines: t.routines, custom: Array.isArray(t.custom) ? t.custom : [], ch: isChannel(t.ch) ? t.ch : "" };
   } catch {
     return null;
   }
+}
+
+// ---------- Live team progress (players -> coach) ----------
+// Players' phones post small updates to the team's channel on ntfy.sh (a free relay, no account or key).
+// An update holds a first name, the workout, which exercise and set, and finished sets. Nothing else.
+const RELAY = "https://ntfy.sh";
+
+function isChannel(ch) {
+  return typeof ch === "string" && /^[A-Za-z0-9_-]{20,64}$/.test(ch);
+}
+
+// A team channel from random bytes: "liftday-" + 24 url-safe characters. Hard to guess = private enough.
+function channelFrom(bytes) {
+  const abc = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+  return "liftday-" + Array.from(bytes.slice(0, 24), (b) => abc[b % 64]).join("");
+}
+
+// Where a player is in their workout, for the coach
+function progressStatus(entries) {
+  const all = allSets(entries, {});
+  const done = all.filter((s) => s.done).length;
+  const next = all.find((s) => !s.done);
+  if (!next) return { done, total: all.length, finished: all.length > 0 };
+  const e = normEntry(entries[next.entryIndex]);
+  return { done, total: all.length, finished: false, lift: next.lift, ex: next.entryIndex + 1, exTotal: entries.length, set: next.setIndex + 1, setsInEx: e.rows.length };
+}
+
+const cleanText = (v, max) => (typeof v === "string" ? v.replace(/[\u0000-\u001f<>]/g, "").trim().slice(0, max) : "");
+const cleanNum = (v, max) => (Number.isFinite(v) && v >= 0 && v <= max ? Math.round(v * 10) / 10 : 0);
+
+// Read an update off the relay. Anything malformed or out of range is dropped (null).
+function parseProgress(text) {
+  let m;
+  try { m = JSON.parse(text); } catch { return null; }
+  if (!m || m.app !== "liftday" || m.v !== 1) return null;
+  const pid = cleanText(m.pid, 24);
+  const name = cleanText(m.name, 24);
+  const state = ["joined", "lifting", "done"].includes(m.state) ? m.state : null;
+  if (!/^[A-Za-z0-9_-]{8,24}$/.test(pid) || !name || !state || !Number.isFinite(m.at)) return null;
+  const out = {
+    pid, name, state, at: m.at,
+    workout: cleanText(m.workout, 30),
+    lift: cleanText(m.lift, 60), ex: cleanNum(m.ex, 30), exTotal: cleanNum(m.exTotal, 30),
+    set: cleanNum(m.set, 20), setsInEx: cleanNum(m.setsInEx, 20),
+    done: cleanNum(m.done, 400), total: cleanNum(m.total, 400), volume: cleanNum(m.volume, 1e6),
+    lines: [],
+  };
+  if (Array.isArray(m.lines)) {
+    out.lines = m.lines.slice(0, 30).map((l) => ({ lift: cleanText(l && l.lift, 60), sets: cleanNum(l && l.sets, 20), weight: l && typeof l.weight === "number" ? cleanNum(l.weight, 1500) : null }))
+      .filter((l) => l.lift);
+  }
+  return out;
+}
+
+// The coach's roster: { pid: { name, last: update, workouts: [finished workouts, newest first] } }
+function applyProgress(roster, u) {
+  const p = roster[u.pid] || { name: u.name, last: null, workouts: [] };
+  const next = { ...p, name: u.name };
+  if (!p.last || u.at >= p.last.at) next.last = u;
+  if (u.state === "done" && !p.workouts.some((w) => w.at === u.at)) {
+    next.workouts = [{ at: u.at, workout: u.workout, done: u.done, total: u.total, volume: u.volume, lines: u.lines }, ...p.workouts]
+      .sort((a, b) => b.at - a.at).slice(0, 60);
+  }
+  return { ...roster, [u.pid]: next };
+}
+
+// How a player is doing over time: share of assigned sets they hit, and each lift's first vs best weight
+function playerProgress(player) {
+  const ws = player.workouts || [];
+  const done = ws.reduce((a, w) => a + w.done, 0);
+  const total = ws.reduce((a, w) => a + w.total, 0);
+  const lifts = {};
+  for (const w of [...ws].reverse()) { // oldest first
+    for (const l of w.lines || []) {
+      if (typeof l.weight !== "number") continue;
+      const x = (lifts[l.lift] = lifts[l.lift] || { first: l.weight, best: l.weight, latest: l.weight });
+      x.best = Math.max(x.best, l.weight);
+      x.latest = l.weight;
+    }
+  }
+  return { workouts: ws.length, hitRate: total ? Math.round((done / total) * 100) : null, lifts };
 }
 
 // ---------- Ghost of your last session ----------
@@ -798,6 +879,7 @@ if (typeof module !== "undefined") {
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
     encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText, stampRecovery, recommendedLifts,
+    isChannel, channelFrom, progressStatus, parseProgress, applyProgress, playerProgress, RELAY,
     startOfWeek, startOfMonth, dayKey, weekStreak, restDays, totalsBetween, weeklySeries, monthlySeries, muscleSets, distribution, DISTRIBUTION_AXES, exerciseHistory, mainExercises, logWeight, niceMax,
   };
 }
@@ -854,6 +936,13 @@ if (typeof document !== "undefined") {
   let setupStep = mode ? null : "choose"; // "choose" or an index into setupSteps()
   let finishNote = "";
   let loadType = "pct";
+  let roster = load("liftday.roster", {}); // coach: players and their progress, from the live channel
+  let liveSource = null; // coach: the open connection to the team channel
+  let liveState = "off"; // "off" | "connecting" | "live"
+  let sendTimer = null;
+  let shareNote = ""; // player: did the last update reach the relay?
+  const openPlayers = new Set();
+  const seenUpdates = new Set();
   let userName = load("liftday.name", ""); // shown on Profile only, stays on this phone
   let weightLog = load("liftday.weights", []); // bodyweight over time: [{ date, lbs }]
   let rankCalcOpen = false; // the Get your rank calculator on the Ranks tab
@@ -1691,6 +1780,7 @@ if (typeof document !== "undefined") {
       recordSet(ns.lift, typeof ns.weight === "number" ? ns.weight : null, ns.reps, ns.unit);
       if (nextSet(entries, maxes, step(), bar())) startRest();
       renderToday();
+      queueProgress();
     } else if (e.target.closest("#skip-rest")) {
       stopRest();
       renderToday();
@@ -1731,6 +1821,7 @@ if (typeof document !== "undefined") {
         if (nextSet(entries, maxes, step(), bar())) startRest();
       }
       renderToday();
+      queueProgress();
       return;
     }
     const menu = e.target.closest("[data-menu]");
@@ -1773,6 +1864,8 @@ if (typeof document !== "undefined") {
     const minutes = session ? Math.max(1, Math.round((Date.now() - session.start) / 60000)) : null;
     history.unshift({ date: new Date().toISOString(), ...summary, minutes });
     save("liftday.history", history);
+    clearTimeout(sendTimer);
+    sendProgress("done", summary);
     saveGhost();
     commitPrevious();
     endSession();
@@ -1904,6 +1997,7 @@ if (typeof document !== "undefined") {
     saveCard();
     renderAll();
     showTab($("tab-card"));
+    queueProgress();
   }
 
   $("clear-card").addEventListener("click", () => {
@@ -2267,18 +2361,28 @@ if (typeof document !== "undefined") {
           <p class="team-name">${escapeHTML(joinPreview.name)}</p>
           ${joinPreview.coach ? `<p class="hint">Coach: ${escapeHTML(joinPreview.coach)}</p>` : ""}
           <p class="hint">${joinPreview.routines.length} ${joinPreview.routines.length === 1 ? "workout" : "workouts"}${joinPreview.routines.length ? `: ${joinPreview.routines.map((r) => escapeHTML(r.name)).join(", ")}` : ""}</p>
+          <label class="field join-name-field"><span>Your name</span>
+            <input class="join-name" maxlength="24" autocomplete="given-name" placeholder="How your coach knows you" value="${escapeHTML((team && team.player && team.player.name) || "")}"></label>
+          ${joinPreview.ch ? `<p class="hint small">Your coach will see your name, the exercise and set you're on, and the sets you finish. It's sent through ntfy.sh, a free relay, and cleared after 12 hours.</p>` : ""}
           <button type="button" class="primary" data-join>Join ${escapeHTML(joinPreview.name)}</button>
         </div>` : ""}`;
   }
 
-  function joinTeam(t) {
+  function randomId(n = 12) {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return channelFrom(bytes).slice(8, 8 + n);
+  }
+
+  function joinTeam(t, playerName = "") {
     for (const c of t.custom || []) {
       if (c && typeof c.id === "string" && !liftMap.has(c.id)) customLifts.push({ group: "My lifts", equip: "other", pattern: "stand", kind: "weight", ...c });
     }
     save("liftday.lifts", customLifts);
     rebuildLibrary();
     for (const r of t.routines) for (const l of r.lines) if (!myLifts.includes(l.lift)) myLifts.push(l.lift);
-    team = { ...t, joined: true, joinedAt: new Date().toISOString() };
+    const player = { id: (team && team.player && team.player.id) || randomId(), name: playerName };
+    team = { ...t, joined: true, joinedAt: new Date().toISOString(), player };
     mode = "team";
     role = "player";
     save("liftday.mode", mode);
@@ -2303,8 +2407,18 @@ if (typeof document !== "undefined") {
 
   document.addEventListener("click", (e) => {
     if (!e.target.closest("[data-join]") || !joinPreview) return;
+    const card = e.target.closest(".team-card");
+    const box = card.querySelector(".join-name");
+    const playerName = box.value.replace(/[<>]/g, "").trim().slice(0, 24);
+    if (!playerName) {
+      box.setAttribute("aria-invalid", "true");
+      box.focus();
+      card.parentElement.querySelector(".join-status").textContent = "Add your name so your coach knows it's you.";
+      return;
+    }
     const name = joinPreview.name;
-    joinTeam(joinPreview);
+    joinTeam(joinPreview, playerName);
+    sendProgress("joined");
     if (setupStep !== null) return finishSetup();
     showApp();
     showTab($("tab-team"));
@@ -2313,8 +2427,10 @@ if (typeof document !== "undefined") {
 
   function renderTeam() {
     const el = $("team-area");
+    if (!el || isPersonal() || role !== "coach") disconnectLive();
     if (!el || isPersonal()) return;
     if (role === "coach") {
+      if (team && !isChannel(team.ch)) { team.ch = randomChannel(); save("liftday.team", team); }
       const t = team || { name: "", coach: "", routines: [] };
       el.innerHTML = `
         <h2>${escapeHTML(t.name || "Your team")}</h2>
@@ -2322,6 +2438,8 @@ if (typeof document !== "undefined") {
         <button type="button" class="primary new-workout gap-s" id="build-team-workout">
           ${PLUS_ICON}<span>Build a team workout</span>
         </button>
+        <div class="sub-row"><h3 class="sub">Players</h3><span class="live-pill" id="live-pill"></span></div>
+        <div id="roster"></div>
         <h3 class="sub">Workouts</h3>
         ${t.routines.length
           ? `<ul class="routines">${t.routines.map((r, i) => `<li class="routine">
@@ -2346,11 +2464,14 @@ if (typeof document !== "undefined") {
               ${navigator.share ? `<button type="button" class="secondary" id="share-link">Share</button>` : ""}
             </div>
           </div>` : `<p class="hint">Name your team first (Me > Change coach or player).</p>`}
-        <p class="note">Lift Day has no server, so player join requests can't reach you here. Players join straight from your link, and nothing about them leaves their phones.</p>`;
+        <p class="note">Players join from your link. While they lift, their phone sends their first name, the exercise and set they're on, and their finished sets to your team's private channel on ntfy.sh (a free relay, no account). The relay clears messages after 12 hours; the player list and their progress stay on this phone.</p>`;
+      renderRoster();
+      connectLive();
     } else {
       el.innerHTML = team && team.joined
         ? `<h2>${escapeHTML(team.name)}</h2>
           ${team.coach ? `<p class="hint">Coach: ${escapeHTML(team.coach)}</p>` : ""}
+          ${playerShareHTML()}
           <h3 class="sub">Team workouts</h3>
           ${team.routines.length
             ? `<ul class="routines">${team.routines.map((r, i) => `<li class="routine">
@@ -2367,6 +2488,172 @@ if (typeof document !== "undefined") {
       renderJoin($("team-join"));
     }
   }
+
+  // ---------- Live progress: players send, the coach watches ----------
+  function randomChannel() {
+    const bytes = new Uint8Array(24);
+    crypto.getRandomValues(bytes);
+    return channelFrom(bytes);
+  }
+
+  // Player: tell the coach where you are. "lifting" updates wait a moment so quick taps send once.
+  function queueProgress() {
+    clearTimeout(sendTimer);
+    sendTimer = setTimeout(() => sendProgress("lifting"), 600);
+  }
+
+  function sendProgress(state, summary = null) {
+    if (isPersonal() || role !== "player" || !team || !team.joined || !isChannel(team.ch) || !team.player || !team.player.name) return;
+    const st = progressStatus(entries);
+    const body = { app: "liftday", v: 1, pid: team.player.id, name: team.player.name, state, at: Date.now(),
+      workout: cardRoutine || "Workout", done: st.done, total: st.total };
+    if (state === "lifting" && st.lift) Object.assign(body, { lift: liftName(st.lift), ex: st.ex, exTotal: st.exTotal, set: st.set, setsInEx: st.setsInEx });
+    if (summary) {
+      body.volume = summary.volume;
+      body.lines = summary.lines.map((l) => ({ lift: liftName(l.lift), sets: l.sets, weight: typeof l.weight === "number" ? l.weight : null }));
+    }
+    fetch(`${RELAY}/${team.ch}`, { method: "POST", body: JSON.stringify(body) })
+      .then((r) => { shareNote = r.ok ? `Coach updated ${new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : "Couldn't reach your coach. It'll try again on your next set."; })
+      .catch(() => { shareNote = "No connection. Your coach will see your next set once you're back online."; })
+      .finally(() => { const el = $("share-note"); if (el) el.textContent = shareNote; });
+  }
+
+  function playerShareHTML() {
+    const p = team.player || {};
+    const live = isChannel(team.ch);
+    return `<div class="share-card">
+      <p class="hint">${p.name ? `Your coach sees you as <strong>${escapeHTML(p.name)}</strong>.` : "Add your name so your coach can follow your progress."}
+        ${live ? "They see the exercise and set you're on while you lift." : "This team link is from before live progress. Ask your coach to send the link again."}</p>
+      <form class="inline-form" id="player-name-form" novalidate>
+        <label class="sr-only" for="player-name">Your name</label>
+        <input id="player-name" maxlength="24" autocomplete="given-name" placeholder="Your name" value="${escapeHTML(p.name || "")}">
+        <button type="submit" class="secondary">${p.name ? "Change" : "Save"}</button>
+      </form>
+      <p class="status" id="share-note" aria-live="polite">${shareNote}</p>
+    </div>`;
+  }
+
+  // Coach: listen to the team channel (catches up on the last 12 hours, then live)
+  function connectLive() {
+    if (liveSource || role !== "coach" || isPersonal() || !team || !isChannel(team.ch) || typeof EventSource === "undefined") return renderLivePill();
+    liveState = "connecting";
+    liveSource = new EventSource(`${RELAY}/${team.ch}/sse?since=12h`);
+    liveSource.onopen = () => { liveState = "live"; renderLivePill(); };
+    liveSource.onerror = () => { liveState = "connecting"; renderLivePill(); };
+    liveSource.onmessage = (ev) => {
+      let data;
+      try { data = JSON.parse(ev.data); } catch { return; }
+      if (data.event !== "message" || seenUpdates.has(data.id)) return;
+      seenUpdates.add(data.id);
+      const u = parseProgress(data.message);
+      if (!u) return;
+      roster = applyProgress(roster, u);
+      save("liftday.roster", roster);
+      renderRoster();
+    };
+    renderLivePill();
+  }
+
+  function disconnectLive() {
+    if (liveSource) liveSource.close();
+    liveSource = null;
+    liveState = "off";
+  }
+
+  function renderLivePill() {
+    const el = $("live-pill");
+    if (!el) return;
+    const text = { live: "Live", connecting: "Connecting…", off: "Offline" }[liveState];
+    el.className = `live-pill ${liveState}`;
+    el.innerHTML = `<i aria-hidden="true"></i>${text}`;
+  }
+
+  function agoText(at) {
+    const min = Math.round((Date.now() - at) / 60000);
+    if (min < 1) return "just now";
+    if (min < 60) return `${min} min ago`;
+    const h = Math.round(min / 60);
+    return h < 24 ? `${h} h ago` : new Date(at).toLocaleDateString([], { month: "short", day: "numeric" });
+  }
+
+  function playerStatus(last) {
+    const fresh = Date.now() - last.at < 20 * 60000;
+    if (last.state === "joined") return { dot: "idle", line: "Joined the team", sub: "Hasn't started a workout yet" };
+    if (last.state === "done") return { dot: "done", line: `Finished ${escapeHTML(last.workout || "a workout")}`, sub: `${last.done} of ${last.total} sets` };
+    if (!last.lift) return { dot: fresh ? "lifting" : "idle", line: `${escapeHTML(last.workout || "Workout")}: every set checked`, sub: `${last.done} of ${last.total} sets` };
+    return { dot: fresh ? "lifting" : "idle", line: `${escapeHTML(last.lift)} · set ${last.set} of ${last.setsInEx}`,
+      sub: `${escapeHTML(last.workout || "Workout")} · exercise ${last.ex} of ${last.exTotal} · ${last.done} of ${last.total} sets done` };
+  }
+
+  function renderRoster() {
+    const el = $("roster");
+    if (!el) return;
+    const players = Object.entries(roster).filter(([, p]) => p.last).sort((a, b) => b[1].last.at - a[1].last.at);
+    if (!players.length) {
+      el.innerHTML = `<div class="empty-box"><p class="empty-title">No players yet</p><p class="hint">Send your team link. When a player joins they show up here, and while they lift you'll see their exercise and set.</p></div>`;
+      return;
+    }
+    el.innerHTML = `<ul class="roster">${players.map(([pid, p]) => {
+      const s = playerStatus(p.last);
+      const pct = p.last.total ? Math.round((p.last.done / p.last.total) * 100) : 0;
+      const prog = playerProgress(p);
+      const liftRows = Object.entries(prog.lifts).sort((a, b) => (b[1].best - b[1].first) - (a[1].best - a[1].first));
+      return `<li><details class="player-card" data-player="${pid}" ${openPlayers.has(pid) ? "open" : ""}>
+        <summary>
+          <span class="p-avatar" aria-hidden="true">${escapeHTML(p.name.charAt(0).toUpperCase())}</span>
+          <span class="p-main">
+            <span class="p-top"><span class="p-name">${escapeHTML(p.name)}</span><span class="p-when"><i class="state-dot ${s.dot}" aria-hidden="true"></i>${s.dot === "lifting" ? "Lifting · " : ""}${agoText(p.last.at)}</span></span>
+            <span class="p-line">${s.line}</span>
+            <span class="p-sub">${s.sub}</span>
+            ${p.last.total ? `<span class="p-bar" role="img" aria-label="${pct}% of sets done"><i style="width:${pct}%"></i></span>` : ""}
+          </span>
+        </summary>
+        <div class="p-detail">
+          <div class="sum-grid">
+            <div class="sum-card"><p class="sum-name">Workouts finished</p><p class="sum-val">${prog.workouts}</p></div>
+            <div class="sum-card"><p class="sum-name">Sets hit</p><p class="sum-val">${prog.hitRate === null ? "–" : `${prog.hitRate}%`}</p></div>
+          </div>
+          <h4 class="sub small">Progress</h4>
+          ${liftRows.length ? `<ul class="best-list">${liftRows.map(([lift, x]) => `<li><span>${escapeHTML(lift)}</span><strong>${x.first} → ${x.best} lbs${x.best > x.first ? ` <span class="gain">+${x.best - x.first}</span>` : ""}</strong></li>`).join("")}</ul>`
+            : `<p class="hint small">Weights show here after their first finished workout.</p>`}
+          <h4 class="sub small">Recent workouts</h4>
+          ${p.workouts.length ? `<ul class="best-list">${p.workouts.slice(0, 8).map((w) => `<li><span>${agoText(w.at)} · ${escapeHTML(w.workout || "Workout")}</span><strong class="${w.done < w.total ? "short" : ""}">${w.done}/${w.total} sets</strong></li>`).join("")}</ul>`
+            : `<p class="hint small">None finished yet.</p>`}
+          <button type="button" class="quiet gap-s" data-remove-player="${pid}">Remove ${escapeHTML(p.name)} from this list</button>
+        </div>
+      </details></li>`;
+    }).join("")}</ul>`;
+  }
+
+  // Keep "5 min ago" honest while the coach watches
+  setInterval(() => { if (!$("panel-team").hidden && role === "coach") renderRoster(); }, 30000);
+
+  document.addEventListener("toggle", (e) => {
+    const d = e.target;
+    if (!d.classList || !d.classList.contains("player-card")) return;
+    if (d.open) openPlayers.add(d.dataset.player); else openPlayers.delete(d.dataset.player);
+  }, true);
+
+  document.addEventListener("click", (e) => {
+    const rm = e.target.closest("[data-remove-player]");
+    if (!rm) return;
+    const { [rm.dataset.removePlayer]: gone, ...rest } = roster;
+    roster = rest;
+    save("liftday.roster", roster);
+    $("team-status").textContent = `${gone ? gone.name : "Player"} removed. They come back if they lift again.`;
+    renderRoster();
+  });
+
+  document.addEventListener("submit", (e) => {
+    if (e.target.id !== "player-name-form") return;
+    e.preventDefault();
+    const name = $("player-name").value.replace(/[<>]/g, "").trim().slice(0, 24);
+    if (!name) { $("share-note").textContent = "Enter a name."; return; }
+    team.player = { id: (team.player && team.player.id) || randomId(), name };
+    save("liftday.team", team);
+    renderTeam();
+    sendProgress(entries.length ? "lifting" : "joined");
+  });
 
   // ---------- Coaches build team workouts right on the Team tab ----------
   // The same exercise builder as Today moves over here; the coach's own card is set aside.

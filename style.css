@@ -1742,3 +1742,40 @@ h2 { font-size: 1.0625rem; }
 .cal-day.lifted.on { box-shadow: 0 0 0 3px var(--navy-900), 0 0 0 5px var(--gold); }
 .sub-head .icon-btn, .week-nav .icon-btn { width: 2.75rem; height: 2.75rem; min-height: 2.75rem; min-width: 0; padding: 0; }
 .readout-val { white-space: nowrap; }
+
+/* ---------- Live team progress ---------- */
+.join-name-field { display: block; margin: 0.75rem 0 0.5rem; }
+.share-card { margin: 0.75rem 0 1rem; padding: 0.75rem; border: 1px solid var(--line); border-radius: var(--radius); background: var(--navy-800); }
+.share-card .hint { margin-top: 0; }
+.share-card .status:empty { display: none; }
+
+.sub-row { display: flex; align-items: baseline; justify-content: space-between; gap: 0.75rem; }
+.live-pill { display: inline-flex; align-items: center; gap: 0.375rem; color: var(--soft); font-size: 0.8125rem; font-weight: 700; }
+.live-pill i { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--soft); }
+.live-pill.live { color: #4fd18b; }
+.live-pill.live i { background: #4fd18b; animation: live-pulse 2s ease-out infinite; }
+.live-pill.connecting i { background: #f6c445; }
+@keyframes live-pulse { 0% { box-shadow: 0 0 0 0 rgba(79, 209, 139, 0.6); } 100% { box-shadow: 0 0 0 0.5rem rgba(79, 209, 139, 0); } }
+
+.roster { list-style: none; margin: 0; padding: 0; display: grid; gap: 0.625rem; }
+.player-card { border: 1px solid var(--line); border-radius: var(--radius); background: var(--navy-800); }
+.player-card[open] { border-color: var(--gold); }
+.player-card > summary { display: grid; grid-template-columns: 2.75rem 1fr; gap: 0.75rem; padding: 0.75rem; cursor: pointer; list-style: none; }
+.player-card > summary::-webkit-details-marker { display: none; }
+.p-avatar { display: grid; place-items: center; width: 2.75rem; height: 2.75rem; border-radius: 50%; background: var(--navy-700); font-weight: 800; font-size: 1.125rem; }
+.p-main { display: grid; gap: 0.125rem; min-width: 0; }
+.p-top { display: flex; justify-content: space-between; gap: 0.5rem; align-items: baseline; }
+.p-name { font-weight: 800; font-size: 1.0625rem; overflow-wrap: anywhere; }
+.p-when { display: inline-flex; align-items: center; gap: 0.375rem; color: var(--soft); font-size: 0.8125rem; white-space: nowrap; }
+.state-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: var(--soft); }
+.state-dot.lifting { background: #4fd18b; }
+.state-dot.done { background: var(--gold); }
+.p-line { font-weight: 700; color: var(--gold); }
+.p-sub { color: var(--soft); font-size: 0.875rem; }
+.p-bar { display: block; height: 0.375rem; margin-top: 0.375rem; border-radius: 999px; background: var(--navy-700); overflow: hidden; }
+.p-bar i { display: block; height: 100%; border-radius: 999px; background: var(--gold); transition: width 400ms var(--ease-out); }
+.p-detail { padding: 0 0.75rem 0.75rem; }
+.sub.small { margin: 1rem 0 0.25rem; font-size: 0.9375rem; }
+.gain { color: #4fd18b; font-weight: 800; }
+.best-list .short { color: #f6c445; }
+@media (prefers-reduced-motion: reduce) { .live-pill.live i { animation: none; } .p-bar i { transition: none; } }

@@ -409,6 +409,45 @@ for (const [label, got, expected] of statTests) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length + statTests.length;
+// Live team progress
+const ch = R.channelFrom(Array.from({ length: 24 }, (_, i) => i * 11));
+const teamWithCh = R.decodeTeam(R.encodeTeam({ name: "OL", coach: "R", routines: [], ch }));
+const card = [
+  { lift: "squat", unit: "reps", reps: 5, load: null, rows: [{ type: "normal", reps: 5, lbs: null, done: true }, { type: "normal", reps: 5, lbs: null, done: false }] },
+  { lift: "bench", unit: "reps", reps: 5, load: null, rows: [{ type: "normal", reps: 5, lbs: null, done: false }] },
+];
+const st = R.progressStatus(card);
+const msg = (o) => JSON.stringify({ app: "liftday", v: 1, pid: "p1234567", name: "Ethan", state: "lifting", at: 1000, ...o });
+let roster = {};
+roster = R.applyProgress(roster, R.parseProgress(msg({ state: "lifting", at: 1000, lift: "Squat", ex: 1, exTotal: 2, set: 2, setsInEx: 2, done: 1, total: 3 })));
+roster = R.applyProgress(roster, R.parseProgress(msg({ state: "done", at: 2000, workout: "Mon", done: 3, total: 3, lines: [{ lift: "squat", sets: 2, weight: 315 }] })));
+roster = R.applyProgress(roster, R.parseProgress(msg({ state: "lifting", at: 1500 }))); // late, older update
+roster = R.applyProgress(roster, R.parseProgress(msg({ state: "done", at: 2000, workout: "Mon", done: 3, total: 3 }))); // replayed
+roster = R.applyProgress(roster, R.parseProgress(msg({ state: "done", at: 3000, workout: "Wed", done: 2, total: 4, lines: [{ lift: "squat", sets: 1, weight: 325 }] })));
+const pp = R.playerProgress(roster.p1234567);
+const liveTests = [
+  ["channel is valid and url-safe", R.isChannel(ch) && ch.startsWith("liftday-"), true],
+  ["team link carries the channel", teamWithCh.ch, ch],
+  ["a bad channel in a link is dropped", R.decodeTeam(R.encodeTeam({ name: "OL", routines: [], ch: "short" })).ch, ""],
+  ["next set: squat set 2 of 2, exercise 1 of 2", `${st.lift} ${st.set}/${st.setsInEx} ${st.ex}/${st.exTotal}`, "squat 2/2 1/2"],
+  ["sets done / total", `${st.done}/${st.total}`, "1/3"],
+  ["all checked = finished", R.progressStatus(card.map((e) => ({ ...e, rows: e.rows.map((r) => ({ ...r, done: true })) }))).finished, true],
+  ["not Lift Day = ignored", R.parseProgress('{"hello":1}'), null],
+  ["junk = ignored", R.parseProgress("not json"), null],
+  ["names are cleaned of tags", R.parseProgress(msg({ name: "<b>Ethan</b>" })).name, "bEthan/b"],
+  ["huge numbers are zeroed", R.parseProgress(msg({ done: 99999 })).done, 0],
+  ["older update doesn't replace the newest", roster.p1234567.last.at, 3000],
+  ["a replayed finish isn't counted twice", roster.p1234567.workouts.length, 2],
+  ["hit rate: 5 of 7 sets", pp.hitRate, 71],
+  ["squat went 315 to 325", `${pp.lifts.squat.first}-${pp.lifts.squat.best}`, "315-325"],
+];
+for (const [label, got, expected] of liveTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length + statTests.length + liveTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);
