@@ -107,6 +107,17 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - With no ranked lift yet, the Ranks tab shows a locked badge, one line on what ranks are, and a gold **Get your rank** button. Once ranked, an **Update my maxes** button sits under the list.
 - The calculator opens at the top of the tab in a gold-bordered panel: bodyweight, then squat, bench, deadlift and overhead press, each with **Estimate** (weight × reps). Ranks update live underneath. The rank-up celebration waits for **See my rank**, so it doesn't cover the form while you type.
 
+## Profile dashboard (after Hevy)
+
+- **Header:** a round avatar with your initial (gold ring), your name with an edit pencil, then Workouts · Week streak · Volume.
+- **Dashboard card:** the selected week's value as a big readout, a 12-week column chart (gold columns 24px max, 4px rounded tops, hairline grid at 0 / half / top, tap a column to read it), and Duration / Volume / Reps pills.
+- **Four tiles:** Statistics, Exercises, Measurements, Calendar. Each opens a page inside Profile with a back arrow; the settings sections sit under them.
+- **Statistics:** a 7-day strip (gold dot = workout, tap a day to filter), front and back body heat maps (one hue, gold, brighter = more sets), then links to Set count per muscle (week navigator + table), Muscle distribution (six-axis radar, this period `#c48508` over the one before `#5b8fd6`, both validated against the navy surface, with a legend and a table), Main exercises and Monthly report (12-month columns, summary cards against the month before, heaviest lifts).
+- **Exercises:** search with your exercises first; each lift page shows heaviest, max, workouts, sets, a line of the heaviest set each time (2px line, 8px dots with a navy ring, 10% wash) and the full history.
+- **Measurements:** latest weigh-in as the readout, 1M / 3M / 1Y / All, a line chart, an add form (lbs + date), and the history with delete. Changing bodyweight anywhere logs it here; the newest weigh-in becomes your bodyweight.
+- **Calendar:** week streak and rest days on top, months with workout days as gold circles (today ringed), tap one to see that day's lifts.
+- Stats show in team mode too (they're plain numbers, no jokes or ranks).
+
 ## Rank-up celebration
 
 Full-screen overlay (navy at 88%), the new badge, the rank name in its color, what ranked up, and "Let's go". The badge pops with a strong ease-out and a built-in overshoot (scale 0.4 to 1.08 to 1, 640ms); the title and lines rise in after it, staggered 100ms. It gets louder by tier:

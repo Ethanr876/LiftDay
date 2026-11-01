@@ -125,7 +125,7 @@ To check the math and search, run the test with Node:
 node tests/math-test.js
 ```
 
-It runs 179 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
+It runs 197 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, profile stats (week streaks, rest days, weekly and monthly totals, sets per muscle, per-lift history, the bodyweight log), their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
 
 ## Files
 
@@ -150,6 +150,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.13:** Profile dashboard like Hevy: header with workouts, week streak and volume; a 12-week chart (duration, volume, reps); Statistics (7-day front and back body graph, muscle distribution radar, set count per muscle by week, main exercises, monthly report); Exercises with per-lift history; Measurements (bodyweight over time); Calendar with streak and rest days
 - [x] **m2.12:** search-first Add exercise (no dropdown; done-before lifts lead the recommendations), coaches build team workouts on the Team tab, finishing a workout starts every worked muscle's recovery clock (personal and team), helper muscles
 - [x] **m2.11:** Get your rank calculator on the Ranks tab (maxes and estimates right there), Start a new routine (build and save a routine without logging a workout); sample day removed
 - [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines

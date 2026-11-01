@@ -293,6 +293,7 @@ function daySummary(entries, maxes, step = ROUND_TO, bar = BAR) {
   const lines = [];
   let sets = 0;
   let volume = 0;
+  let reps = 0;
   for (const raw of entries) {
     const e = normEntry(raw);
     const done = e.rows.filter((r) => r.done);
@@ -301,13 +302,15 @@ function daySummary(entries, maxes, step = ROUND_TO, bar = BAR) {
     if (weights.some((w) => w === null)) continue; // needed a max that was never entered
     const top = weights.some((w) => typeof w === "number") ? Math.max(...weights.filter((w) => typeof w === "number")) : undefined;
     const counted = done.filter((r) => typeof r.reps === "number");
-    lines.push({ lift: e.lift, sets: done.length, reps: counted.length ? counted[counted.length - 1].reps : "failure", unit: e.unit, weight: top });
+    const totalReps = e.unit === "reps" ? counted.reduce((sum, r) => sum + r.reps, 0) : 0;
+    lines.push({ lift: e.lift, sets: done.length, reps: counted.length ? counted[counted.length - 1].reps : "failure", unit: e.unit, weight: top, totalReps });
+    reps += totalReps;
     sets += done.length;
     done.forEach((r, i) => {
       if (r.type !== "warmup" && typeof weights[i] === "number" && typeof r.reps === "number" && e.unit === "reps") volume += r.reps * weights[i];
     });
   }
-  return { lines, sets, volume };
+  return { lines, sets, volume, reps };
 }
 
 // How a line reads: "4 × 5 at 75%", "3 × 12", "3 × 45 sec", "20 min", "1 warm-up + 3 × 5 at 75%",
@@ -574,7 +577,7 @@ function musclesFor(lift) {
   if (!main.length) return main;
   const base = lift.group === "Glutes" ? "Legs" : lift.group;
   for (const g of HELPERS[`${base}|${lift.pattern}`] || []) {
-    if (!main.some((m) => m.group === g)) main.push({ group: g, heavy: false });
+    if (!main.some((m) => m.group === g)) main.push({ group: g, heavy: false, helper: true });
   }
   return main;
 }
@@ -630,6 +633,156 @@ function recommendedLifts(doneBefore, popular, isLift, limit = 14) {
   return out;
 }
 
+// ---------- Profile stats (all from the history log) ----------
+// A history day: { date: ISO, lines: [{ lift, sets, reps, unit, weight, totalReps }], sets, volume, reps, minutes }
+const DAY_MS = 86400000;
+
+function startOfDay(ms) {
+  const d = new Date(ms);
+  d.setHours(0, 0, 0, 0);
+  return d.getTime();
+}
+
+// Weeks start on Sunday, like the calendar
+function startOfWeek(ms) {
+  const d = new Date(startOfDay(ms));
+  d.setDate(d.getDate() - d.getDay());
+  return d.getTime();
+}
+
+function shiftDays(ms, n) {
+  const d = new Date(ms);
+  d.setDate(d.getDate() + n);
+  return d.getTime();
+}
+
+function startOfMonth(ms, shift = 0) {
+  const d = new Date(ms);
+  return new Date(d.getFullYear(), d.getMonth() + shift, 1).getTime();
+}
+
+function dayKey(ms) {
+  const d = new Date(ms);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+}
+
+// Weeks in a row with at least one workout. This week counts once you've lifted;
+// until then the streak from last week is still alive.
+function weekStreak(times, now) {
+  const weeks = new Set(times.map(startOfWeek));
+  let w = startOfWeek(now);
+  if (!weeks.has(w)) w = startOfWeek(shiftDays(w, -7));
+  let n = 0;
+  while (weeks.has(w)) { n++; w = startOfWeek(shiftDays(w, -7)); }
+  return n;
+}
+
+// Days since your last workout (0 = lifted today). null if you never have.
+function restDays(times, now) {
+  if (!times.length) return null;
+  const last = Math.max(...times.map(startOfDay));
+  return Math.max(0, Math.round((startOfDay(now) - last) / DAY_MS));
+}
+
+// The number a day adds to a chart
+function dayMetric(day, metric) {
+  if (metric === "workouts") return 1;
+  if (metric === "duration") return day.minutes || 0;
+  return day[metric] || 0; // volume, sets, reps
+}
+
+function daysBetween(history, from, to) {
+  return history.filter((d) => { const t = Date.parse(d.date); return t >= from && t < to; });
+}
+
+function totalsBetween(history, from, to) {
+  const days = daysBetween(history, from, to);
+  const sum = (m) => days.reduce((a, d) => a + dayMetric(d, m), 0);
+  return { workouts: days.length, duration: sum("duration"), volume: sum("volume"), sets: sum("sets"), reps: sum("reps") };
+}
+
+// Last n weeks (oldest first): [{ start, value }]
+function weeklySeries(history, metric, now, n = 12) {
+  const out = [];
+  let start = startOfWeek(now);
+  for (let i = 0; i < n; i++) {
+    const next = startOfWeek(shiftDays(start, 7));
+    out.unshift({ start, value: daysBetween(history, start, next).reduce((a, d) => a + dayMetric(d, metric), 0) });
+    start = startOfWeek(shiftDays(start, -7));
+  }
+  return out;
+}
+
+// n months ending with the month of `at` (oldest first)
+function monthlySeries(history, metric, at, n = 12) {
+  const out = [];
+  for (let i = n - 1; i >= 0; i--) {
+    const start = startOfMonth(at, -i);
+    const days = daysBetween(history, start, startOfMonth(start, 1));
+    out.push({ start, value: days.reduce((a, d) => a + dayMetric(d, metric), 0) });
+  }
+  return out;
+}
+
+// Sets per muscle group. The main muscle gets every set, helper muscles half (bench: chest 3, triceps 1.5).
+function muscleSets(history, liftLookup, from, to) {
+  const out = {};
+  for (const day of daysBetween(history, from, to)) {
+    for (const line of day.lines || []) {
+      for (const m of musclesFor(liftLookup(line.lift))) {
+        out[m.group] = (out[m.group] || 0) + (m.helper ? 0.5 : 1) * (line.sets || 0);
+      }
+    }
+  }
+  return out;
+}
+
+// Six big areas for the muscle distribution chart
+const DISTRIBUTION_AXES = ["Back", "Chest", "Core", "Shoulders", "Arms", "Legs"];
+function distribution(sets) {
+  const g = (k) => sets[k] || 0;
+  return { Back: g("Back"), Chest: g("Chest"), Core: g("Abs"), Shoulders: g("Shoulders"),
+    Arms: g("Biceps") + g("Triceps") + g("Grip & forearms"), Legs: g("Legs") + g("Calves") };
+}
+
+// Every time you did a lift, newest first
+function exerciseHistory(history, lift) {
+  const out = [];
+  for (const day of history) {
+    for (const line of day.lines || []) if (line.lift === lift) out.push({ date: day.date, ...line });
+  }
+  return out.sort((a, b) => Date.parse(b.date) - Date.parse(a.date));
+}
+
+// Lifts you do most often
+function mainExercises(history) {
+  const map = {};
+  for (const day of history) {
+    for (const line of day.lines || []) {
+      const m = (map[line.lift] = map[line.lift] || { lift: line.lift, times: 0, sets: 0 });
+      m.times += 1;
+      m.sets += line.sets || 0;
+    }
+  }
+  return Object.values(map).sort((a, b) => b.times - a.times || b.sets - a.sets);
+}
+
+// Bodyweight log: one entry per day (a new one that day replaces the old), oldest first
+function logWeight(log, at, lbs) {
+  const key = dayKey(at);
+  return log.filter((e) => dayKey(Date.parse(e.date)) !== key)
+    .concat([{ date: new Date(at).toISOString(), lbs }])
+    .sort((a, b) => Date.parse(a.date) - Date.parse(b.date));
+}
+
+// Tidy axis ticks: 0 and a round top (0 / 50 / 100, 0 / 2,000 / 4,000)
+function niceMax(value) {
+  if (value <= 0) return 1;
+  const pow = 10 ** Math.floor(Math.log10(value));
+  for (const m of [1, 2, 2.5, 5, 10]) if (m * pow >= value) return m * pow;
+  return 10 * pow;
+}
+
 // "under 1 h", "20 h", "2.5 days" (read with "ago" or "ready in")
 function hoursText(h) {
   if (h < 1) return "under 1 h";
@@ -645,6 +798,7 @@ if (typeof module !== "undefined") {
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
     encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText, stampRecovery, recommendedLifts,
+    startOfWeek, startOfMonth, dayKey, weekStreak, restDays, totalsBetween, weeklySeries, monthlySeries, muscleSets, distribution, DISTRIBUTION_AXES, exerciseHistory, mainExercises, logWeight, niceMax,
   };
 }
 
@@ -700,6 +854,8 @@ if (typeof document !== "undefined") {
   let setupStep = mode ? null : "choose"; // "choose" or an index into setupSteps()
   let finishNote = "";
   let loadType = "pct";
+  let userName = load("liftday.name", ""); // shown on Profile only, stays on this phone
+  let weightLog = load("liftday.weights", []); // bodyweight over time: [{ date, lbs }]
   let rankCalcOpen = false; // the Get your rank calculator on the Ranks tab
   let plan = [{ type: "normal", reps: 5 }]; // the sets in the Add exercise form, before they go on the card
   let newArmed = null; // timer while "Tap again to clear" is showing
@@ -1137,6 +1293,7 @@ if (typeof document !== "undefined") {
     if (tab.id === "tab-team") renderTeam();
     if (tab.id === "tab-ranks") renderRanks();
     if (tab.id === "tab-home") renderHome();
+    if (tab.id === "tab-me") { meStack = []; renderProfile(); }
     window.scrollTo(0, 0);
   }
 
@@ -1612,10 +1769,10 @@ if (typeof document !== "undefined") {
     // Every muscle you worked starts its recovery clock now (personal and team)
     muscleLog = stampRecovery(muscleLog, entries, liftById, Date.now());
     save("liftday.muscles", muscleLog);
-    if (isPersonal()) {
-      history.unshift({ date: new Date().toISOString(), ...summary });
-      save("liftday.history", history);
-    }
+    // Every finished workout goes in the log (Profile stats use it in both modes; Home shows it on personal)
+    const minutes = session ? Math.max(1, Math.round((Date.now() - session.start) / 60000)) : null;
+    history.unshift({ date: new Date().toISOString(), ...summary, minutes });
+    save("liftday.history", history);
     saveGhost();
     commitPrevious();
     endSession();
@@ -1900,6 +2057,8 @@ if (typeof document !== "undefined") {
       }
       t.removeAttribute("aria-invalid");
       showSaved(save("liftday.bodyweight", bodyweight));
+      weightLog = logWeight(weightLog, Date.now(), bodyweight);
+      save("liftday.weights", weightLog);
       updateRatios();
     }
 
@@ -2080,6 +2239,7 @@ if (typeof document !== "undefined") {
     renderRanks();
     renderHype();
     renderHome();
+    renderProfile();
     $("lifts-count").textContent = myLifts.length;
   }
 
@@ -2901,6 +3061,515 @@ if (typeof document !== "undefined") {
   // =================================================================
   // Picking a lift inside Add exercise (search the whole library)
   // =================================================================
+
+  // =================================================================
+  // Profile: header, dashboard chart, Statistics, Exercises, Measurements, Calendar, Monthly report
+  // =================================================================
+
+  const SURFACE = "#0b1730";
+  const GRID = "#22396a";
+  const INK_SOFT = "#a9b8d0";
+  const BAR_GOLD = "#f3b62a";
+  const CUR = "#c48508"; // two-series charts: this period (validated against the navy surface)
+  const PREV = "#5b8fd6"; // two-series charts: the period before
+  const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const FULL_MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+  const WEEKDAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+  const BACK_ICON = `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>`;
+  const CHEVRON = `<svg class="chev" viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2.25" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>`;
+
+  let meStack = []; // open Profile pages: [{ page, arg }]
+  let dashMetric = "volume";
+  let dashPick = null; // selected week bar
+  let reportMonth = null;
+  let reportMetric = "workouts";
+  let reportPick = null;
+  let distRange = 30;
+  let bodyWeek = null;
+  let bodyDay = null;
+  let statsDay = null;
+  let weightRange = 90;
+  let calPick = null;
+  let exQuery = "";
+
+  const fmt = (n) => Math.round(n).toLocaleString();
+  const compact = (n) => (n >= 10000 ? `${Math.round(n / 100) / 10}K` : fmt(n));
+  const monthDay = (t) => { const d = new Date(t); return `${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+  const dayLabel = (t) => { const d = new Date(t); return `${WEEKDAYS[d.getDay()]}, ${MONTHS[d.getMonth()]} ${d.getDate()}`; };
+  function durationText(min) {
+    if (!min) return "0 min";
+    return min >= 60 ? `${Math.floor(min / 60)}h ${min % 60}m` : `${min} min`;
+  }
+  const METRIC_TEXT = {
+    workouts: (v) => `${fmt(v)} ${v === 1 ? "workout" : "workouts"}`,
+    duration: (v) => durationText(v),
+    volume: (v) => `${fmt(v)} lbs`,
+    sets: (v) => `${fmt(v)} sets`,
+    reps: (v) => `${fmt(v)} reps`,
+  };
+  const historyTimes = () => history.map((d) => Date.parse(d.date));
+
+  // ---------- Charts (hand-drawn SVG; single series uses the team gold) ----------
+  // Columns: 24px max, 4px rounded tops, square at the baseline, hairline grid, tap a column to read it.
+  function columnChart(series, { picked, label, dataAttr }) {
+    const W = 340, H = 168, left = 40, right = 6, top = 10, base = 136;
+    const max = niceMax(Math.max(0, ...series.map((s) => s.value)));
+    const band = (W - left - right) / series.length;
+    const bw = Math.min(24, band * 0.62);
+    const y = (v) => base - (v / max) * (base - top);
+    const tickFmt = (v) => (max >= 10000 ? compact(v) : fmt(v));
+    let grid = "";
+    for (const v of [0, max / 2, max]) {
+      grid += `<line x1="${left}" x2="${W - right}" y1="${y(v)}" y2="${y(v)}" stroke="${GRID}" stroke-width="1"/>
+        <text x="${left - 6}" y="${y(v) + 3.5}" text-anchor="end" class="tick">${tickFmt(v)}</text>`;
+    }
+    let bars = "";
+    series.forEach((s, i) => {
+      const x = left + band * i + (band - bw) / 2;
+      const h = base - y(s.value);
+      const dim = picked !== null && picked !== i ? ` fill-opacity="0.6"` : "";
+      if (s.value > 0) {
+        const r = Math.min(4, h, bw / 2);
+        bars += `<path d="M${x} ${base} V${base - h + r} Q${x} ${base - h} ${x + r} ${base - h} H${x + bw - r} Q${x + bw} ${base - h} ${x + bw} ${base - h + r} V${base} Z" fill="${BAR_GOLD}"${dim}/>`;
+      }
+      bars += `<rect x="${left + band * i}" y="${top}" width="${band}" height="${base - top + 20}" fill="transparent" ${dataAttr}="${i}" class="hit"><title>${label(s)}</title></rect>`;
+      if (s.tick) bars += `<text x="${left + band * i + band / 2}" y="${base + 16}" text-anchor="middle" class="tick">${s.tick}</text>`;
+    });
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Column chart">${grid}${bars}</svg>`;
+  }
+
+  // Line over time: 2px line, 8px dots with a surface ring, 10% wash
+  function lineChart(points, from, to, unit) {
+    const W = 340, H = 168, left = 44, right = 10, top = 12, base = 132;
+    if (!points.length) return "";
+    const vals = points.map((p) => p.v);
+    let lo = Math.floor(Math.min(...vals) - 1), hi = Math.ceil(Math.max(...vals) + 1);
+    if (hi - lo < 4) { lo -= 2; hi += 2; }
+    const span = Math.max(1, to - from);
+    const x = (t) => left + ((t - from) / span) * (W - left - right);
+    const y = (v) => base - ((v - lo) / (hi - lo)) * (base - top);
+    let grid = "";
+    for (const v of [lo, (lo + hi) / 2, hi]) {
+      grid += `<line x1="${left}" x2="${W - right}" y1="${y(v)}" y2="${y(v)}" stroke="${GRID}" stroke-width="1"/>
+        <text x="${left - 6}" y="${y(v) + 3.5}" text-anchor="end" class="tick">${Math.round(v * 10) / 10}${unit}</text>`;
+    }
+    const pts = points.map((p) => `${x(p.t).toFixed(1)},${y(p.v).toFixed(1)}`);
+    const line = points.length > 1 ? `<path d="M${pts.join(" L")}" fill="none" stroke="${BAR_GOLD}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>
+      <path d="M${x(points[0].t)},${base} L${pts.join(" L")} L${x(points[points.length - 1].t)},${base} Z" fill="${BAR_GOLD}" fill-opacity="0.1"/>` : "";
+    const dots = points.map((p) => `<circle cx="${x(p.t)}" cy="${y(p.v)}" r="4" fill="${BAR_GOLD}" stroke="${SURFACE}" stroke-width="2"><title>${monthDay(p.t)}: ${p.v}${unit}</title></circle>`).join("");
+    const ticks = `<text x="${left}" y="${base + 18}" class="tick">${monthDay(from)}</text><text x="${W - right}" y="${base + 18}" text-anchor="end" class="tick">${monthDay(to)}</text>`;
+    return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Line chart over time">${grid}${line}${dots}${ticks}</svg>`;
+  }
+
+  // Six-axis radar: this period (gold) over the period before (blue)
+  function radarChart(cur, prev) {
+    const W = 340, H = 300, cx = 170, cy = 150, R = 100;
+    const angles = [-120, -60, 0, 60, 120, 180].map((a) => (a * Math.PI) / 180);
+    const max = niceMax(Math.max(1, ...DISTRIBUTION_AXES.map((k) => Math.max(cur[k], prev[k]))));
+    const pt = (i, f) => [cx + Math.cos(angles[i]) * R * f, cy + Math.sin(angles[i]) * R * f];
+    let grid = "";
+    for (const f of [0.25, 0.5, 0.75, 1]) grid += `<polygon points="${angles.map((_, i) => pt(i, f).join(",")).join(" ")}" fill="none" stroke="${GRID}" stroke-width="1"/>`;
+    angles.forEach((_, i) => { const [x, y] = pt(i, 1); grid += `<line x1="${cx}" y1="${cy}" x2="${x}" y2="${y}" stroke="${GRID}" stroke-width="1"/>`; });
+    const shape = (vals, color) => {
+      const p = DISTRIBUTION_AXES.map((k, i) => pt(i, vals[k] / max));
+      return `<polygon points="${p.map((q) => q.join(",")).join(" ")}" fill="${color}" fill-opacity="0.1" stroke="${color}" stroke-width="2" stroke-linejoin="round"/>
+        ${p.map((q, i) => `<circle cx="${q[0]}" cy="${q[1]}" r="4" fill="${color}" stroke="${SURFACE}" stroke-width="2"><title>${DISTRIBUTION_AXES[i]}: ${vals[DISTRIBUTION_AXES[i]]} sets</title></circle>`).join("")}`;
+    };
+    const labels = DISTRIBUTION_AXES.map((k, i) => {
+      const [x, y] = pt(i, 1.2);
+      const anchor = Math.abs(Math.cos(angles[i])) < 0.1 ? "middle" : Math.cos(angles[i]) > 0 ? "start" : "end";
+      return `<text x="${x}" y="${y + 4}" text-anchor="${anchor}" class="axis-label">${k}</text>`;
+    }).join("");
+    return `<svg class="chart radar" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sets per area, this period against the one before">${grid}${shape(prev, PREV)}${shape(cur, CUR)}${labels}</svg>`;
+  }
+
+  // Front + back heat map for a set count per muscle
+  function bodyPair(sets) {
+    const max = Math.max(0, ...Object.values(sets));
+    const levels = Object.fromEntries(Object.entries(sets).map(([g, v]) => [g, max ? v / max : 0]));
+    return `<div class="body-pair">${bodyHeatSVG(levels, "front")}${bodyHeatSVG(levels, "back")}</div>
+      <div class="heat-key" aria-hidden="true"><span>Fewer sets</span><i></i><span>More sets</span></div>`;
+  }
+
+  // A row of 7 day buttons, a dot under days you lifted
+  function dayStrip(start, picked, attr) {
+    const lifted = new Set(historyTimes().map(dayKey));
+    let out = "";
+    for (let i = 0; i < 7; i++) {
+      const t = shiftDays(start, i);
+      const d = new Date(t);
+      const on = picked === t;
+      out += `<button type="button" class="day-chip${on ? " on" : ""}" ${attr}="${t}" aria-pressed="${on}" aria-label="${dayLabel(t)}${lifted.has(dayKey(t)) ? ", workout" : ""}">
+        <span>${WEEKDAYS[d.getDay()][0]}</span><strong>${d.getDate()}</strong><i class="${lifted.has(dayKey(t)) ? "dot" : ""}"></i></button>`;
+    }
+    return `<div class="day-strip">${out}</div>`;
+  }
+
+  function subHead(title, extra = "") {
+    return `<div class="sub-head"><button type="button" class="icon-btn secondary" data-back aria-label="Back">${BACK_ICON}</button><h2>${title}</h2>${extra}</div>`;
+  }
+
+  function summaryCards(now, before, beforeLabel) {
+    const card = (name, key) => `<div class="sum-card"><p class="sum-name">${name}</p><p class="sum-val">${key === "duration" ? durationText(now[key]) : key === "volume" ? `${compact(now[key])} lbs` : fmt(now[key])}</p>
+      <p class="sum-prev">${beforeLabel}: ${key === "duration" ? durationText(before[key]) : key === "volume" ? `${compact(before[key])} lbs` : fmt(before[key])}</p></div>`;
+    return `<div class="sum-grid">${card("Workouts", "workouts")}${card("Duration", "duration")}${card("Volume", "volume")}${card("Sets", "sets")}</div>`;
+  }
+
+  function chips(options, current, attr) {
+    return `<div class="chip-row" role="group">${options.map(([v, t]) => `<button type="button" class="pill" ${attr}="${v}" aria-pressed="${String(v) === String(current)}">${t}</button>`).join("")}</div>`;
+  }
+
+  // ---------- Main Profile view ----------
+  function renderProfile() {
+    if (meStack.length) return renderSub();
+    $("me-sub").hidden = true;
+    $("me-main").hidden = false;
+    const times = historyTimes();
+    const streak = weekStreak(times, Date.now());
+    const total = totalsBetween(history, 0, Infinity);
+    const initial = (userName || "").trim().charAt(0).toUpperCase();
+    $("me-header").innerHTML = `
+      <div class="avatar" aria-hidden="true">${initial || `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="8" r="4"/><path d="M4 21c0-4 3.6-7 8-7s8 3 8 7"/></svg>`}</div>
+      <div class="me-who">
+        <div class="name-row">
+          <p class="me-name">${userName ? escapeHTML(userName) : "Your name"}</p>
+          <button type="button" class="icon-btn secondary small-icon" id="edit-name" aria-label="Edit name"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20h4L19 9l-4-4L4 16z"/></svg></button>
+        </div>
+        <form class="name-form" id="name-form" hidden novalidate>
+          <label class="sr-only" for="name-input">Your name</label>
+          <input id="name-input" maxlength="24" value="${escapeHTML(userName || "")}" placeholder="Your name" autocomplete="nickname">
+          <button type="submit" class="secondary">Save</button>
+        </form>
+        <dl class="me-stats">
+          <div><dt>Workouts</dt><dd>${fmt(history.length)}</dd></div>
+          <div><dt>Week streak</dt><dd>${streak}</dd></div>
+          <div><dt>Volume</dt><dd>${compact(total.volume)}</dd></div>
+        </dl>
+      </div>`;
+    renderDash();
+  }
+
+  function renderDash() {
+    const series = weeklySeries(history, dashMetric, Date.now(), 12).map((w, i, all) => ({ ...w, tick: i % 3 === 0 || i === all.length - 1 ? monthDay(w.start) : "" }));
+    const any = history.length > 0;
+    const pick = dashPick === null ? series.length - 1 : dashPick;
+    const s = series[pick];
+    $("me-dash").innerHTML = any
+      ? `<div class="readout"><p class="readout-val">${METRIC_TEXT[dashMetric](s.value)}</p>
+          <p class="readout-sub">${pick === series.length - 1 ? "This week" : `Week of ${monthDay(s.start)}`} · last 12 weeks</p></div>
+        ${columnChart(series, { picked: pick, dataAttr: "data-dash-bar", label: (x) => `Week of ${monthDay(x.start)}: ${METRIC_TEXT[dashMetric](x.value)}` })}
+        ${chips([["duration", "Duration"], ["volume", "Volume"], ["reps", "Reps"]], dashMetric, "data-dash-metric")}`
+      : `<div class="empty-chart"><svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round"><path d="M5 20V12M10 20V8M15 20V11M20 20V4"/></svg>
+          <p>No data yet</p><p class="hint small">Finish a workout and your weekly volume, time and reps show up here.</p></div>`;
+  }
+
+  // ---------- Sub pages ----------
+  function openSub(page, arg = null) {
+    meStack.push({ page, arg });
+    renderSub();
+    $("panel-me").scrollIntoView({ block: "start" });
+    const back = $("me-sub").querySelector("[data-back]");
+    if (back) back.focus({ preventScroll: true });
+  }
+
+  function renderSub() {
+    const top = meStack[meStack.length - 1];
+    $("me-main").hidden = true;
+    $("me-sub").hidden = false;
+    const pages = { stats: statsPage, distribution: distributionPage, bodysets: bodySetsPage, main: mainExercisesPage,
+      report: reportPage, exercises: exercisesPage, exercise: exercisePage, measures: measuresPage, calendar: calendarPage };
+    $("me-sub").innerHTML = pages[top.page](top.arg);
+  }
+
+  function statsPage() {
+    const today = startOfDay(Date.now());
+    const start = shiftDays(today, -6);
+    const from = statsDay ?? start;
+    const to = statsDay !== null ? shiftDays(statsDay, 1) : shiftDays(today, 1);
+    const sets = muscleSets(history, liftById, from, to);
+    const totalSets = Object.values(sets).reduce((a, b) => a + b, 0);
+    const link = (page, icon, title, text) => `<li><button type="button" class="stat-link" data-sub="${page}">${icon}<span><strong>${title}</strong><span class="hint small">${text}</span></span>${CHEVRON}</button></li>`;
+    return `${subHead("Statistics")}
+      <h3 class="sub">Last 7 days body graph</h3>
+      ${dayStrip(start, statsDay, "data-stats-day")}
+      ${bodyPair(sets)}
+      <p class="hint center">${totalSets ? `${fmt(totalSets)} sets ${statsDay !== null ? `on ${dayLabel(statsDay)}` : "in the last 7 days"}` : statsDay !== null ? `Nothing logged on ${dayLabel(statsDay)}.` : "Nothing logged in the last 7 days."}${statsDay !== null ? ` <button type="button" class="link" data-stats-day="all">Show all 7 days</button>` : ""}</p>
+      <h3 class="sub">Advanced statistics</h3>
+      <ul class="stat-links">
+        ${link("bodysets", `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 20h18M6 16v-4M10 16V8M14 16v-6M18 16V5"/></svg>`, "Set count per muscle group", "Sets for each muscle, week by week.")}
+        ${link("distribution", `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 3l8 5v8l-8 5-8-5V8z"/><path d="M12 8l4 3-1 5H9l-1-5z"/></svg>`, "Muscle distribution", "Compare this period with the one before.")}
+        ${link("main", `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M6.5 7v10M17.5 7v10M3 9.5v5M21 9.5v5M6.5 12h11"/></svg>`, "Main exercises", "The lifts you do most often.")}
+        ${link("report", `<svg viewBox="0 0 24 24" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>`, "Monthly report", "Workouts, time, volume and sets by month.")}
+      </ul>`;
+  }
+
+  function distributionPage() {
+    const now = Date.now();
+    const to = shiftDays(startOfDay(now), 1);
+    const from = shiftDays(to, -distRange);
+    const before = shiftDays(from, -distRange);
+    const cur = distribution(muscleSets(history, liftById, from, to));
+    const prev = distribution(muscleSets(history, liftById, before, from));
+    const rangeName = { 30: "30 days", 90: "3 months", 365: "year" }[distRange];
+    const rows = DISTRIBUTION_AXES.map((k) => `<tr><th scope="row">${k}</th><td>${fmt(cur[k])}</td><td>${fmt(prev[k])}</td></tr>`).join("");
+    return `${subHead("Muscle distribution")}
+      ${chips([[30, "Last 30 days"], [90, "3 months"], [365, "Year"]], distRange, "data-dist-range")}
+      ${radarChart(cur, prev)}
+      <div class="legend"><span><i style="background:${CUR}"></i>Last ${rangeName}</span><span><i style="background:${PREV}"></i>The ${rangeName} before</span></div>
+      <table class="stat-table"><caption class="sr-only">Sets per area</caption><thead><tr><th scope="col">Area</th><th scope="col">Now</th><th scope="col">Before</th></tr></thead><tbody>${rows}</tbody></table>
+      ${summaryCards(totalsBetween(history, from, to), totalsBetween(history, before, from), "Before")}
+      <p class="note">Sets count fully for the main muscle and half for muscles that help (bench press: chest, plus half for triceps and shoulders).</p>`;
+  }
+
+  function bodySetsPage() {
+    const week = bodyWeek ?? startOfWeek(Date.now());
+    const end = shiftDays(week, 7);
+    const from = bodyDay ?? week;
+    const to = bodyDay !== null ? shiftDays(bodyDay, 1) : end;
+    const sets = muscleSets(history, liftById, from, to);
+    const total = Object.values(sets).reduce((a, b) => a + b, 0);
+    const groups = [...RECOVERY_ORDER, "Neck"];
+    const last = new Date(shiftDays(end, -1));
+    const isThisWeek = week === startOfWeek(Date.now());
+    return `${subHead("Set count per muscle")}
+      <div class="week-nav">
+        <button type="button" class="icon-btn secondary" data-body-week="-1" aria-label="Week before">${BACK_ICON}</button>
+        <p>${new Date(week).getDate()} ${MONTHS[new Date(week).getMonth()]} – ${last.getDate()} ${MONTHS[last.getMonth()]} ${last.getFullYear()}</p>
+        <button type="button" class="icon-btn secondary flip" data-body-week="1" aria-label="Next week" ${isThisWeek ? "disabled" : ""}>${BACK_ICON}</button>
+      </div>
+      ${dayStrip(week, bodyDay, "data-body-day")}
+      ${bodyPair(sets)}
+      <table class="stat-table"><caption class="sr-only">Sets per muscle</caption>
+        <thead><tr><th scope="col">Muscle</th><th scope="col">Sets</th></tr></thead>
+        <tbody><tr class="total"><th scope="row">Total</th><td>${fmt(total)}</td></tr>
+        ${groups.map((g) => `<tr><th scope="row">${g === "Grip & forearms" ? "Forearms" : g === "Abs" ? "Abdominals" : g}</th><td>${Math.round((sets[g] || 0) * 10) / 10}</td></tr>`).join("")}</tbody></table>
+      <p class="note">Main muscle gets every set; helper muscles get half.</p>`;
+  }
+
+  function exerciseRow(id, meta) {
+    const l = liftById(id);
+    if (!l.group) return "";
+    return `<li><button type="button" class="result ex-row" data-ex="${id}">
+      ${figureSVG(l.pattern, l.equip, "thumb")}
+      <span class="r-text"><span class="r-name">${l.name}</span><span class="r-meta">${meta || `${l.group} · ${equipLabel(l)}`}</span></span>${CHEVRON}</button></li>`;
+  }
+
+  function mainExercisesPage() {
+    const list = mainExercises(history);
+    return `${subHead("Main exercises")}
+      ${list.length ? `<ul class="results">${list.map((m) => exerciseRow(m.lift, `${m.times} ${m.times === 1 ? "workout" : "workouts"} · ${fmt(m.sets)} sets`)).join("")}</ul>`
+        : `<div class="empty-box"><p class="empty-title">No workouts yet</p><p class="hint">Finish a workout and your most-done lifts show up here.</p></div>`}`;
+  }
+
+  function reportPage() {
+    const month = reportMonth ?? startOfMonth(Date.now());
+    const series = monthlySeries(history, reportMetric, month, 12).map((m) => ({ ...m, tick: MONTHS[new Date(m.start).getMonth()][0] }));
+    const pick = reportPick ?? series.length - 1;
+    const sel = series[pick];
+    const now = totalsBetween(history, month, startOfMonth(month, 1));
+    const prevMonth = startOfMonth(month, -1);
+    const before = totalsBetween(history, prevMonth, month);
+    const d = new Date(month);
+    const isThisMonth = month === startOfMonth(Date.now());
+    const best = {};
+    for (const day of daysBetween(history, month, startOfMonth(month, 1))) {
+      for (const line of day.lines || []) if (typeof line.weight === "number") best[line.lift] = Math.max(best[line.lift] || 0, line.weight);
+    }
+    const bestRows = Object.entries(best).sort((a, b) => b[1] - a[1]).slice(0, 5);
+    return `${subHead("Monthly report")}
+      <div class="week-nav">
+        <button type="button" class="icon-btn secondary" data-report-month="-1" aria-label="Month before">${BACK_ICON}</button>
+        <p>${FULL_MONTHS[d.getMonth()]} ${d.getFullYear()}</p>
+        <button type="button" class="icon-btn secondary flip" data-report-month="1" aria-label="Next month" ${isThisMonth ? "disabled" : ""}>${BACK_ICON}</button>
+      </div>
+      <div class="readout"><p class="readout-val">${METRIC_TEXT[reportMetric](sel.value)}</p>
+        <p class="readout-sub">${FULL_MONTHS[new Date(sel.start).getMonth()]} ${new Date(sel.start).getFullYear()}</p></div>
+      ${columnChart(series, { picked: pick, dataAttr: "data-report-bar", label: (x) => `${FULL_MONTHS[new Date(x.start).getMonth()]}: ${METRIC_TEXT[reportMetric](x.value)}` })}
+      ${chips([["workouts", "Workouts"], ["duration", "Duration"], ["volume", "Volume"], ["sets", "Sets"]], reportMetric, "data-report-metric")}
+      <h3 class="sub">Summary</h3>
+      ${summaryCards(now, before, MONTHS[new Date(prevMonth).getMonth()])}
+      <h3 class="sub">Heaviest lifts this month</h3>
+      ${bestRows.length ? `<ul class="best-list">${bestRows.map(([id, w]) => `<li><span>${liftName(id)}</span><strong>${w} lbs</strong></li>`).join("")}</ul>` : `<p class="hint">No weighted lifts logged this month.</p>`}`;
+  }
+
+  function exercisesPage() {
+    return `${subHead("Exercises")}
+      <label class="search">${SEARCH_ICON}<span class="sr-only">Search exercises</span>
+        <input type="search" id="ex-search" value="${escapeHTML(exQuery)}" placeholder="Search exercise" autocomplete="off" enterkeyhint="search"></label>
+      <div id="ex-results">${exerciseResults()}</div>`;
+  }
+
+  function exerciseResults() {
+    const q = exQuery.trim();
+    if (!q) {
+      const mine = mainExercises(history);
+      return `${mine.length ? `<p class="picker-sub">Your exercises</p><ul class="results">${mine.map((m) => exerciseRow(m.lift, `${liftById(m.lift).group} · ${m.times} ${m.times === 1 ? "workout" : "workouts"}`)).join("")}</ul>` : ""}
+        <p class="picker-sub">Popular</p><ul class="results">${RECOMMENDED[mode || "personal"].filter((id) => !mine.some((m) => m.lift === id)).map((id) => exerciseRow(id)).join("")}</ul>
+        <p class="hint small">Search to see any of the ${library.length} lifts.</p>`;
+    }
+    const found = searchLifts(library, q, SEARCH_SYNONYMS).slice(0, 40);
+    return found.length ? `<p class="picker-sub">${found.length === 40 ? "Top 40" : found.length} ${found.length === 1 ? "match" : "matches"}</p><ul class="results">${found.map((l) => exerciseRow(l.id)).join("")}</ul>`
+      : `<div class="empty-box"><p class="empty-title">No lift matches “${escapeHTML(q)}”</p><p class="hint">Try fewer words, like “row” or “curl”.</p></div>`;
+  }
+
+  function exercisePage(id) {
+    const l = liftById(id);
+    const log = exerciseHistory(history, id);
+    const weighted = log.filter((h) => typeof h.weight === "number");
+    const heaviest = weighted.length ? Math.max(...weighted.map((h) => h.weight)) : null;
+    const est = Math.max(maxes[id] || 0, bests[id] || 0) || null;
+    const sets = log.reduce((a, h) => a + (h.sets || 0), 0);
+    const pts = weighted.map((h) => ({ t: Date.parse(h.date), v: h.weight })).sort((a, b) => a.t - b.t);
+    const tile = (name, val) => `<div class="sum-card"><p class="sum-name">${name}</p><p class="sum-val">${val}</p></div>`;
+    return `${subHead(escapeHTML(l.name))}
+      <div class="ex-hero">${figureSVG(l.pattern, l.equip, "fig-lg")}<p class="hint">${l.group} · ${equipLabel(l)}</p></div>
+      <div class="sum-grid">${tile("Heaviest", heaviest ? `${heaviest} lbs` : "–")}${tile("Max", est ? `${est} lbs` : "–")}${tile("Workouts", fmt(log.length))}${tile("Sets", fmt(sets))}</div>
+      ${pts.length ? `<h3 class="sub">Heaviest set each time</h3>${lineChart(pts, pts.length > 1 ? pts[0].t : shiftDays(pts[0].t, -14), pts.length > 1 ? pts[pts.length - 1].t : shiftDays(pts[0].t, 14), "")}` : ""}
+      <h3 class="sub">History</h3>
+      ${log.length ? `<ul class="best-list">${log.map((h) => `<li><span>${dayLabel(Date.parse(h.date))}</span><strong>${historyLine(h)}</strong></li>`).join("")}</ul>`
+        : `<p class="hint">You haven't logged ${escapeHTML(l.name)} yet. Finish a workout with it and every session shows up here.</p>`}`;
+  }
+
+  function measuresPage() {
+    const now = Date.now();
+    const from = weightRange ? shiftDays(startOfDay(now), -weightRange) : (weightLog.length ? Date.parse(weightLog[0].date) : now);
+    const pts = weightLog.map((e) => ({ t: Date.parse(e.date), v: e.lbs })).filter((p) => p.t >= from);
+    const latest = weightLog[weightLog.length - 1];
+    const rangeName = { 30: "Last month", 90: "Last 3 months", 365: "Last year", 0: "All time" }[weightRange];
+    return `${subHead("Measurements", `<button type="button" class="icon-btn secondary" id="weight-add-toggle" aria-label="Add a bodyweight">${PLUS_ICON}</button>`)}
+      <form class="inline-form weight-form" id="weight-form" ${weightLog.length ? "hidden" : ""} novalidate>
+        <label class="field"><span>Bodyweight (lbs)</span><input id="weight-input" type="number" inputmode="decimal" min="80" max="500" step="0.1" value="${bodyweight || ""}" placeholder="lbs"></label>
+        <label class="field"><span>Date</span><input id="weight-date" type="date" value="${dayKey(now)}" max="${dayKey(now)}"></label>
+        <button type="submit" class="primary">Save</button>
+        <p class="error" id="weight-error" role="alert"></p>
+      </form>
+      ${latest ? `<div class="readout"><p class="readout-val">${latest.lbs} lbs <span class="readout-date">${monthDay(Date.parse(latest.date))}</span></p></div>
+        ${chips([[30, "1M"], [90, "3M"], [365, "1Y"], [0, "All"]], weightRange, "data-weight-range")}
+        ${pts.length ? lineChart(pts, pts.length > 1 ? from : shiftDays(pts[0].t, -14), pts.length > 1 ? now : shiftDays(pts[0].t, 14), "") : `<p class="hint">No weigh-ins in this range.</p>`}
+        <p class="readout-sub">${rangeName}</p>
+        <h3 class="sub">Weight history</h3>
+        <ul class="best-list">${[...weightLog].reverse().map((e) => `<li><span>${monthDay(Date.parse(e.date))}, ${new Date(e.date).getFullYear()}</span><strong>${e.lbs} lbs</strong>
+          <button type="button" class="quiet-x" data-weight-del="${e.date}" aria-label="Delete ${monthDay(Date.parse(e.date))}">${X_ICON}</button></li>`).join("")}</ul>`
+        : `<p class="hint">Log your bodyweight to see it over time. Changing it in Settings logs it here too.</p>`}`;
+  }
+
+  function calendarPage() {
+    const now = Date.now();
+    const times = historyTimes();
+    const lifted = {};
+    for (const d of history) (lifted[dayKey(Date.parse(d.date))] = lifted[dayKey(Date.parse(d.date))] || []).push(d);
+    const first = times.length ? Math.min(...times) : now;
+    let month = Math.min(startOfMonth(first), startOfMonth(now, -2));
+    const months = [];
+    while (month <= startOfMonth(now)) { months.push(month); month = startOfMonth(month, 1); }
+    const rest = restDays(times, now);
+    const picked = calPick && lifted[calPick];
+    const grid = months.map((m) => {
+      const d = new Date(m);
+      const days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate();
+      let cells = "<span></span>".repeat(d.getDay());
+      for (let i = 1; i <= days; i++) {
+        const t = new Date(d.getFullYear(), d.getMonth(), i).getTime();
+        const key = dayKey(t);
+        const did = lifted[key];
+        const today = key === dayKey(now);
+        cells += did
+          ? `<button type="button" class="cal-day lifted${calPick === key ? " on" : ""}${today ? " today" : ""}" data-cal="${key}" aria-label="${dayLabel(t)}, workout">${i}</button>`
+          : `<span class="cal-day${today ? " today" : ""}" ${today ? `aria-label="Today"` : ""}>${i}</span>`;
+      }
+      return `<h3 class="cal-month">${FULL_MONTHS[d.getMonth()]} ${d.getFullYear()}</h3><div class="cal-grid">${cells}</div>`;
+    }).join("");
+    return `${subHead("Calendar")}
+      <div class="cal-stats"><p><strong>${weekStreak(times, now)}</strong> week streak</p><p><strong>${rest === null ? "–" : rest}</strong> ${rest === 1 ? "rest day" : "rest days"}</p></div>
+      ${picked ? `<div class="cal-detail"><p class="cal-detail-title">${dayLabel(Date.parse(picked[0].date))}</p>${picked.map((day) => `
+          <p class="hint small">${day.sets} sets · ${fmt(day.volume || 0)} lbs${day.minutes ? ` · ${durationText(day.minutes)}` : ""}</p>
+          <ul class="best-list">${(day.lines || []).map((l) => `<li><span>${liftName(l.lift)}</span><strong>${historyLine(l)}</strong></li>`).join("")}</ul>`).join("")}</div>`
+        : `<p class="hint small">Gold days are workouts. Tap one to see what you did.</p>`}
+      <div class="cal-week" aria-hidden="true">${WEEKDAYS.map((w) => `<span>${w[0]}</span>`).join("")}</div>
+      ${grid}`;
+  }
+
+  // ---------- Taps and typing on Profile ----------
+  $("panel-me").addEventListener("click", (e) => {
+    const t = e.target;
+    const sub = t.closest("[data-sub]");
+    if (sub) return openSub(sub.dataset.sub);
+    if (t.closest("[data-back]")) {
+      meStack.pop();
+      return renderProfile();
+    }
+    const ex = t.closest("[data-ex]");
+    if (ex) return openSub("exercise", ex.dataset.ex);
+    if (t.closest("#edit-name")) {
+      $("name-form").hidden = false;
+      $("name-input").focus();
+      return;
+    }
+    const pairs = [
+      ["data-dash-metric", (v) => { dashMetric = v; dashPick = null; renderDash(); }],
+      ["data-dash-bar", (v) => { dashPick = Number(v); renderDash(); }],
+      ["data-report-metric", (v) => { reportMetric = v; renderSub(); }],
+      ["data-report-bar", (v) => { reportPick = Number(v); renderSub(); }],
+      ["data-report-month", (v) => { reportMonth = startOfMonth(reportMonth ?? Date.now(), Number(v)); reportPick = null; renderSub(); }],
+      ["data-dist-range", (v) => { distRange = Number(v); renderSub(); }],
+      ["data-body-week", (v) => { bodyWeek = startOfWeek(shiftDays(bodyWeek ?? startOfWeek(Date.now()), 7 * Number(v) + 1)); bodyDay = null; renderSub(); }],
+      ["data-body-day", (v) => { bodyDay = bodyDay === Number(v) ? null : Number(v); renderSub(); }],
+      ["data-stats-day", (v) => { statsDay = v === "all" || statsDay === Number(v) ? null : Number(v); renderSub(); }],
+      ["data-weight-range", (v) => { weightRange = Number(v); renderSub(); }],
+      ["data-cal", (v) => { calPick = calPick === v ? null : v; renderSub(); }],
+    ];
+    for (const [attr, fn] of pairs) {
+      const el = t.closest(`[${attr}]`);
+      if (el) return fn(el.getAttribute(attr));
+    }
+    if (t.closest("#weight-add-toggle")) {
+      const f = $("weight-form");
+      f.hidden = !f.hidden;
+      if (!f.hidden) $("weight-input").focus();
+      return;
+    }
+    const del = t.closest("[data-weight-del]");
+    if (del) {
+      weightLog = weightLog.filter((w) => w.date !== del.dataset.weightDel);
+      save("liftday.weights", weightLog);
+      renderSub();
+    }
+  });
+
+  $("panel-me").addEventListener("submit", (e) => {
+    if (e.target.id === "name-form") {
+      e.preventDefault();
+      userName = $("name-input").value.trim().slice(0, 24);
+      save("liftday.name", userName);
+      return renderProfile();
+    }
+    if (e.target.id === "weight-form") {
+      e.preventDefault();
+      const lbs = Number($("weight-input").value);
+      const date = $("weight-date").value;
+      if (!isValidBodyweight(lbs)) { $("weight-error").textContent = "Enter a bodyweight between 80 and 500 lbs."; return; }
+      if (!date) { $("weight-error").textContent = "Pick a date."; return; }
+      const [y, m, d] = date.split("-").map(Number);
+      const at = new Date(y, m - 1, d, 12).getTime();
+      weightLog = logWeight(weightLog, Math.min(at, Date.now()), Math.round(lbs * 10) / 10);
+      save("liftday.weights", weightLog);
+      // The newest weigh-in is your bodyweight everywhere (ranks, pound-for-pound)
+      const latest = weightLog[weightLog.length - 1];
+      if (latest && Math.round(latest.lbs) !== bodyweight) {
+        bodyweight = Math.round(latest.lbs);
+        save("liftday.bodyweight", bodyweight);
+        $("bodyweight").value = bodyweight;
+        updateRatios();
+      }
+      renderSub();
+    }
+  });
+
+  $("panel-me").addEventListener("input", (e) => {
+    if (e.target.id !== "ex-search") return;
+    exQuery = e.target.value;
+    $("ex-results").innerHTML = exerciseResults(); // just the list, so typing keeps its place
+  });
 
   // =================================================================
   // Rank-up celebration: bigger the higher you climb (personal only)

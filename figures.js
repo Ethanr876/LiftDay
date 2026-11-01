@@ -210,6 +210,51 @@ function mirrorPath(d) {
   return d.replace(/(-?\d+(?:\.\d+)?) (-?\d+(?:\.\d+)?)/g, (_, x, y) => `${160 - Number(x)} ${y}`);
 }
 
+// Back of the body (left half; mirrored for the right)
+const BACK_REGIONS = {
+  Back: [
+    "M66 50 C72 48 80 47 80 47 L80 82 C74 77 68 68 62 59 C62 55 63 51 66 50 Z",      // trapezius
+    "M60 68 C66 74 73 82 79 86 L79 124 C72 128 64 126 58 120 C55 104 56 86 60 68 Z", // lats
+    "M64 129 L79 129 L79 150 C73 152 67 150 63 146 Z",                               // lower back
+  ],
+  Shoulders: ["M44 55 C50 49 58 50 61 54 L58 72 C52 76 44 80 39 78 C37 68 39 60 44 55 Z"],
+  Triceps: ["M39 81 C44 80 50 78 54 79 L51 112 C47 117 41 117 37 112 C36 102 36 90 39 81 Z"],
+  "Grip & forearms": ["M36 118 C41 120 48 120 51 117 L46 168 C42 172 36 172 32 168 C31 150 32 132 36 118 Z"],
+  Legs: [
+    "M58 153 C66 151 74 153 79 157 L79 186 C72 190 62 188 56 182 C54 172 55 161 58 153 Z", // glutes
+    "M57 192 C64 192 72 194 78 198 L76 238 C70 242 63 242 59 238 C55 222 55 206 57 192 Z", // hamstrings
+  ],
+  Calves: ["M59 248 C65 244 72 246 75 250 L72 292 C68 297 63 297 61 292 C56 278 56 262 59 248 Z"],
+};
+
+const BODY_SILHOUETTE = `
+    <ellipse cx="80" cy="24" rx="14" ry="17"/>
+    <rect x="72" y="38" width="16" height="14" rx="4"/>
+    <path d="M46 52 C60 46 100 46 114 52 C124 56 126 66 124 80 L118 116 L127 168 C128 176 124 182 118 180 L110 120 L104 150 L108 172 L104 244 L101 300 C101 308 106 312 100 314 L88 314 C84 312 86 306 86 300 L82 244 L80 190 L78 244 L74 300 C74 306 76 312 72 314 L60 314 C54 312 59 308 59 300 L56 244 L52 172 L56 150 L50 120 L42 180 C36 182 32 176 33 168 L42 116 L36 80 C34 66 36 56 46 52 Z"/>`;
+
+// How much each muscle was worked: levels { group: 0..1 }. One hue (gold), brighter = more sets.
+function bodyHeatSVG(levels, side = "front", cls = "body-heat") {
+  const regions = side === "back" ? BACK_REGIONS : BODY_REGIONS;
+  let muscles = "";
+  for (const [group, paths] of Object.entries(regions)) {
+    const level = levels[group] || 0;
+    const fill = level > 0 ? "#f3b62a" : "#22396a";
+    const opacity = level > 0 ? (0.3 + 0.7 * level).toFixed(2) : "1";
+    for (const d of paths) {
+      for (const shape of [d, mirrorPath(d)]) {
+        muscles += `<path d="${shape}" fill="${fill}" fill-opacity="${opacity}" stroke="#0b1730" stroke-width="1.5"><title>${group}</title></path>`;
+      }
+    }
+  }
+  const lines = side === "back"
+    ? `<path d="M80 48 V150" stroke="#0b1730" stroke-width="1.5" fill="none"/>`
+    : `<path d="M80 96 V150 M68 112 H92 M68 129 H92" stroke="#0b1730" stroke-width="1.5" fill="none"/>`;
+  return `<svg class="${cls}" viewBox="0 0 160 320" role="img" aria-label="${side === "back" ? "Back" : "Front"} of the body, muscles shaded by sets">
+    <g fill="#183059" stroke="#2a4475" stroke-width="1.5">${BODY_SILHOUETTE}</g>
+    ${muscles}${lines}
+  </svg>`;
+}
+
 // statuses: { group: "ready" | "almost" | "rest" }
 function bodyMapSVG(statuses, cls = "body-map") {
   const color = { ready: "#4fd18b", almost: "#f6c445", rest: "#ff6b5e" };

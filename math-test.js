@@ -364,6 +364,51 @@ for (const [label, got, expected] of newTests) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length;
+// Profile stats
+const at = (y, m, d) => new Date(y, m - 1, d, 12).getTime(); // noon local, clear of midnight
+const iso = (t) => new Date(t).toISOString();
+const nowP = at(2026, 11, 5); // Thursday
+const hist = [
+  { date: iso(at(2026, 11, 3)), lines: [{ lift: "bench", sets: 3, reps: 5, unit: "reps", weight: 205, totalReps: 15 }], sets: 3, volume: 3075, reps: 15, minutes: 50 },
+  { date: iso(at(2026, 10, 28)), lines: [{ lift: "bench", sets: 4, reps: 5, unit: "reps", weight: 200, totalReps: 20 }, { lift: "dumbbell-curl", sets: 2, reps: 10, unit: "reps", weight: 30, totalReps: 20 }], sets: 6, volume: 5200, reps: 40, minutes: 60 },
+  { date: iso(at(2026, 10, 20)), lines: [{ lift: "squat", sets: 5, reps: 5, unit: "reps", weight: 315, totalReps: 25 }], sets: 5, volume: 7875, reps: 25 },
+  { date: iso(at(2026, 9, 2)), lines: [{ lift: "bench", sets: 3, reps: 5, unit: "reps", weight: 185, totalReps: 15 }], sets: 3, volume: 2775, reps: 15, minutes: 40 },
+];
+const times = hist.map((d) => Date.parse(d.date));
+const wk = R.weeklySeries(hist, "volume", nowP, 4);
+const mo = R.monthlySeries(hist, "workouts", nowP, 3);
+const statLift = (id) => ({ bench: { group: "Chest", pattern: "bench", equip: "barbell", kind: "weight" }, "dumbbell-curl": { group: "Biceps", pattern: "curl", equip: "dumbbell", kind: "weight" }, squat: { group: "Legs", pattern: "squat", equip: "barbell", kind: "weight" } }[id]);
+const ms = R.muscleSets(hist, statLift, R.startOfMonth(nowP, -1), R.startOfMonth(nowP, 1));
+let wlog = R.logWeight([], at(2026, 10, 23), 245);
+wlog = R.logWeight(wlog, at(2026, 11, 1), 243);
+wlog = R.logWeight(wlog, at(2026, 11, 1) + 3600000, 242);
+const statTests = [
+  ["weeks start on Sunday", new Date(R.startOfWeek(nowP)).getDay(), 0],
+  ["streak: this week, last week, the week before = 3", R.weekStreak(times, nowP), 3],
+  ["streak still alive before you lift this week", R.weekStreak(times.slice(1), at(2026, 11, 2)), 2],
+  ["streak broken after a skipped week", R.weekStreak(times.slice(1), at(2026, 11, 12)), 0],
+  ["rest days since the last workout", R.restDays(times, nowP), 2],
+  ["rest days with no workouts", R.restDays([], nowP), null],
+  ["weekly volume, oldest to newest", wk.map((w) => w.value).join(), "0,7875,5200,3075"],
+  ["monthly workouts Sep, Oct, Nov", mo.map((m) => m.value).join(), "1,2,1"],
+  ["Oct + Nov: 3 workouts", R.totalsBetween(hist, R.startOfMonth(nowP, -1), R.startOfMonth(nowP, 1)).workouts, 3],
+  ["duration skips days without a time", R.totalsBetween(hist, 0, Infinity).duration, 150],
+  ["sets per muscle: chest gets bench sets (3+4)", ms.Chest, 7],
+  ["helpers get half: triceps 3.5 from bench", ms.Triceps, 3.5],
+  ["curls count for biceps (2) + bench rows none", ms.Biceps, 2],
+  ["distribution: arms = biceps + triceps + grip", R.distribution(ms).Arms, 2 + 3.5],
+  ["exercise history newest first", R.exerciseHistory(hist, "bench").map((h) => h.weight).join(), "205,200,185"],
+  ["main exercise is bench (3 times)", R.mainExercises(hist)[0].lift + R.mainExercises(hist)[0].times, "bench3"],
+  ["one bodyweight per day, newest replaces", wlog.map((e) => e.lbs).join(), "245,242"],
+  ["nice axis tops", [37, 120, 2300, 0].map(R.niceMax).join(), "50,200,2500,1"],
+];
+for (const [label, got, expected] of statTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length + statTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);
