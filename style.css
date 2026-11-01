@@ -1540,3 +1540,54 @@ h2 { font-size: 1.0625rem; }
 }
 .rank-calc .bw-row { margin: 1rem 0 0.5rem; }
 .rank-calc .primary { width: 100%; }
+
+/* ---------- Add exercise: search first, then set it up ---------- */
+.add-head { display: flex; align-items: baseline; justify-content: space-between; gap: 1rem; }
+.add-done { font-weight: 700; }
+.add-picker { padding: 0; border: 0; }
+.add-picker[hidden], .add-details[hidden] { display: none; }
+.add-picker .results-area { max-height: 26rem; overflow-y: auto; overscroll-behavior: contain; margin-top: 0.25rem; }
+.result.choose:hover .r-add, .result.choose:focus-visible .r-add { border-color: var(--gold); color: var(--gold); }
+.r-tag {
+  display: inline-block;
+  margin-right: 0.25rem;
+  padding: 0 0.375rem;
+  border-radius: 4px;
+  background: rgba(243, 182, 42, 0.16);
+  color: var(--gold);
+  font-size: 0.75rem;
+  font-weight: 800;
+  line-height: 1.5;
+}
+
+.add-details { animation: add-in 200ms var(--ease-out); }
+@keyframes add-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
+
+.chosen {
+  display: grid;
+  grid-template-columns: 3.5rem 1fr auto;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0.5rem 0 1rem;
+  padding: 0.625rem 0.75rem;
+  border: 1px solid var(--gold);
+  border-radius: var(--radius);
+  background: var(--navy-800);
+}
+.chosen-fig { width: 3.5rem; height: 3.5rem; border-radius: 8px; background: var(--navy-900); }
+.chosen-name { display: block; color: var(--gold); font-weight: 800; font-size: 1.125rem; line-height: 1.25; }
+.chosen-change { min-height: 2.5rem; padding: 0 0.875rem; }
+.add-submit { width: 100%; margin-top: 0.5rem; }
+.add-status { min-height: 0; margin-top: 0.75rem; color: var(--gold); font-weight: 700; }
+.add-status:empty { display: none; }
+
+/* Team workout builder (coaches) */
+.team-builder[hidden] { display: none; }
+.team-builder-head { margin-bottom: 1rem; }
+.team-builder .ob-actions { margin-top: 0.75rem; }
+
+@media (prefers-reduced-motion: reduce) {
+  .add-details { animation: none; }
+}
+.team-builder .check { visibility: hidden; }
+.team-builder .set-row.next .set-type { border-color: transparent; }

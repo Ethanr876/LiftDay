@@ -77,40 +77,40 @@
         </button>
 
         <form class="add" id="add-form" novalidate>
-          <h2>Add exercise</h2>
-          <div class="fields">
-            <div class="field lift">
-              <div id="lift-field">
-                <label for="lift"><span>Lift</span></label>
-                <select name="lift" id="lift"></select>
-              </div>
-              <button type="button" class="link find-lift" id="find-lift" aria-expanded="false" aria-controls="add-picker">Search all lifts</button>
-              <p class="status" id="lift-count-note" aria-live="polite"></p>
-              <div class="picker add-picker" id="add-picker" hidden></div>
-            </div>
-            <label class="field f-sets">
-              <span>Sets</span>
-              <select name="sets" id="sets-select"></select>
-            </label>
-            <label class="field f-reps">
-              <span id="reps-label">Reps</span>
-              <input name="reps" type="number" inputmode="numeric" min="1" value="5" required>
-            </label>
-            <label class="field f-load">
-              <span id="load-label">% of max</span>
-              <input name="load" type="number" inputmode="decimal" min="1" step="0.5" value="75" required>
-            </label>
-            <div class="field f-loadtype">
-              <span id="loadtype-label">Weight as</span>
-              <div class="seg two" role="radiogroup" aria-labelledby="loadtype-label">
-                <button type="button" role="radio" class="seg-btn" data-loadtype="pct" aria-checked="true"><strong>% of max</strong></button>
-                <button type="button" role="radio" class="seg-btn" data-loadtype="lbs" aria-checked="false"><strong>Lbs</strong></button>
-              </div>
-            </div>
+          <div class="add-head">
+            <h2 id="add-title">Add exercise</h2>
+            <button type="button" class="link add-done" id="add-done">Done</button>
           </div>
-          <div class="set-plan" id="set-plan" role="list" aria-label="Sets for this exercise"></div>
-          <p class="error" id="add-error" role="alert"></p>
-          <button type="submit" class="primary">Add to workout</button>
+          <input type="hidden" name="lift" id="lift">
+          <div class="picker add-picker" id="add-picker"></div>
+          <div class="add-details" id="add-details" hidden>
+            <div class="chosen" id="chosen-lift"></div>
+            <div class="fields">
+              <label class="field f-sets">
+                <span>Sets</span>
+                <select name="sets" id="sets-select"></select>
+              </label>
+              <label class="field f-reps">
+                <span id="reps-label">Reps</span>
+                <input name="reps" type="number" inputmode="numeric" min="1" value="5" required>
+              </label>
+              <label class="field f-load">
+                <span id="load-label">% of max</span>
+                <input name="load" type="number" inputmode="decimal" min="1" step="0.5" value="75" required>
+              </label>
+              <div class="field f-loadtype">
+                <span id="loadtype-label">Weight as</span>
+                <div class="seg two" role="radiogroup" aria-labelledby="loadtype-label">
+                  <button type="button" role="radio" class="seg-btn" data-loadtype="pct" aria-checked="true"><strong>% of max</strong></button>
+                  <button type="button" role="radio" class="seg-btn" data-loadtype="lbs" aria-checked="false"><strong>Lbs</strong></button>
+                </div>
+              </div>
+            </div>
+            <div class="set-plan" id="set-plan" role="list" aria-label="Sets for this exercise"></div>
+            <p class="error" id="add-error" role="alert"></p>
+            <button type="submit" class="primary add-submit">Add to workout</button>
+          </div>
+          <p class="status add-status" id="add-status" aria-live="polite"></p>
         </form>
 
         <div id="routines-area"></div>
@@ -131,6 +131,10 @@
 
       <!-- TEAM: coach builds + shares, player joins -->
       <section id="panel-team" role="tabpanel" aria-labelledby="tab-team" hidden>
+        <div class="team-builder" id="team-builder" hidden>
+          <div class="team-builder-head" id="team-builder-head"></div>
+          <div id="team-builder-slot"></div>
+        </div>
         <div id="team-area"></div>
         <p class="status" id="team-status" aria-live="polite"></p>
       </section>

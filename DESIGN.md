@@ -88,6 +88,16 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Add exercise:** Lift, then a **Sets** dropdown (1 to 10), then the weight. Picking a number of sets draws that many rows underneath: set badge, a type dropdown (Warm-up, Normal, Failure, Drop, Remove set) and a Reps box.
 - **Failure sets** have no rep count. The Reps box becomes a dashed "Until you can't" (on the card: "Fail"), and the stage shows MAX instead of a number. Failure sets don't count toward volume. Switching a set back from failure gives it a rep count again.
 
+## Add exercise (search first)
+
+- No lift dropdown. The form opens on a search box (focused), muscle-group chips, then **Recommended for you**: lifts you've done before first, tagged "Done before" in a small gold label, then popular lifts. A lift already on the card is tagged "On the card". The list scrolls inside the form (max 26rem) so the page doesn't jump.
+- Tapping a lift swaps the search for a gold-bordered **chosen** row (picture, name, group, Change) and the fields slide in (200ms ease-out, none with reduced motion): Sets, weight, the set list, Add to workout.
+- After adding, the form goes straight back to the search with a gold "Bench Press added" line, so you can add the next lift without extra taps. **Done** closes it.
+
+## Team workouts (coach)
+
+- Gold **Build a team workout** at the top of the coach's Team tab. The same builder (card + Add exercise) moves into the Team tab with a header: "New team workout", Cancel, and Save team workout. Check-off boxes are hidden. The coach's own card is set aside and comes back on save or cancel.
+
 ## Start a new routine
 
 - Second button under New workout (always secondary). It opens Add exercise in routine mode: the stage becomes a "New routine" panel with a gold **Save routine** (once there's an exercise) and a quiet Cancel. Check-off boxes are hidden, Add exercise drops to secondary, and nothing gets logged. Saving asks for a name, then empties the card and the routine shows under My routines.

@@ -230,7 +230,7 @@ const H = 3600000, now = Date.UTC(2026, 9, 30, 12);
 const groups = (id) => R.musclesFor(L(id)).map((m) => m.group + (m.heavy ? "*" : "")).join(",");
 const rec = [
   ["squat works legs, heavy", groups("squat"), "Legs*"],
-  ["deadlift works back + legs, heavy", groups("deadlift"), "Back,Legs*"],
+  ["deadlift works back + legs (heavy) + grip", groups("deadlift"), "Back,Legs*,Grip & forearms"],
   ["power clean works back + legs", groups("clean"), "Back,Legs"],
   ["dumbbell curl = biceps", groups("dumbbell-curl"), "Biceps"],
   ["hip thrust (glutes) counts as legs, not heavy", groups("hip-thrust"), "Legs"],
@@ -335,6 +335,35 @@ for (const [label, got, expected] of failTests) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length;
+// Helper muscles, recovery stamped at the finish, recommendations
+const mk = (group, pattern, equip = "dumbbell", kind = "weight") => ({ group, pattern, equip, kind });
+const groupsOf = (lift) => R.musclesFor(lift).map((m) => m.group).join();
+const t0 = Date.parse("2026-11-01T10:00:00Z");
+const finish = t0 + 3600000;
+const lookup = (id) => ({ bench: mk("Chest", "bench", "barbell"), squat: mk("Legs", "squat", "barbell"), curl: mk("Biceps", "curl") }[id]);
+const done = (lift, checked) => ({ lift, unit: "reps", reps: 5, load: null, rows: [{ type: "normal", reps: 5, lbs: null, done: checked }] });
+const stamped = R.stampRecovery({ Chest: { at: t0 - 86400000, heavy: false } }, [done("bench", true), done("squat", true), done("curl", false)], lookup, finish);
+const newTests = [
+  ["bench works chest + triceps + shoulders", groupsOf(mk("Chest", "bench", "barbell")), "Chest,Triceps,Shoulders"],
+  ["barbell row works back + biceps", groupsOf(mk("Back", "row", "barbell")), "Back,Biceps"],
+  ["curl is just biceps", groupsOf(mk("Biceps", "curl")), "Biceps"],
+  ["finish stamps chest at the finish time", stamped.Chest.at, finish],
+  ["finish stamps the helpers too (triceps)", stamped.Triceps.at, finish],
+  ["heavy squat puts legs on the long clock", stamped.Legs.heavy, true],
+  ["unchecked exercise doesn't count (biceps)", stamped.Biceps, undefined],
+  ["chest is red right after finishing", R.recoveryStatus("Chest", stamped.Chest.at, false, finish + 60000).status, "rest"],
+  ["chest is yellow 50 h after finishing", R.recoveryStatus("Chest", stamped.Chest.at, false, finish + 50 * 3600000).status, "almost"],
+  ["chest is green 72 h after finishing", R.recoveryStatus("Chest", stamped.Chest.at, false, finish + 72 * 3600000).status, "ready"],
+  ["done-before lifts come first", R.recommendedLifts(["curl", "bench"], ["squat", "bench", "deadlift"], () => true).join(), "curl,bench,squat,deadlift"],
+  ["unknown ids are skipped and the list is capped", R.recommendedLifts(["nope"], ["a", "b", "c"], (id) => id !== "nope", 2).join(), "a,b"],
+];
+for (const [label, got, expected] of newTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);

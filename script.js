@@ -557,9 +557,29 @@ const RECOVERY = {
 const HEAVY_LEGS = [72, 96];
 const HEAVY_EQUIP = ["barbell", "trap bar", "Smith machine"];
 
+// Muscles that help with a movement, on top of its main group (they recover on their normal clock).
+// Pressing works the triceps and shoulders, pulling works the biceps.
+const HELPERS = {
+  "Chest|bench": ["Triceps", "Shoulders"], "Chest|pushup": ["Triceps", "Shoulders"], "Chest|dip": ["Triceps", "Shoulders"],
+  "Shoulders|overhead": ["Triceps"], "Shoulders|pushup": ["Triceps"],
+  "Triceps|bench": ["Chest"], "Triceps|dip": ["Chest"],
+  "Back|row": ["Biceps"], "Back|pulldown": ["Biceps"], "Back|pullup": ["Biceps", "Grip & forearms"],
+  "Back|hinge": ["Legs", "Grip & forearms"],
+};
+
 // Which recovery groups a lift works. Glutes count as legs. Heavy barbell squats and
 // deadlifts also tax the legs for longer.
 function musclesFor(lift) {
+  const main = mainMusclesFor(lift);
+  if (!main.length) return main;
+  const base = lift.group === "Glutes" ? "Legs" : lift.group;
+  for (const g of HELPERS[`${base}|${lift.pattern}`] || []) {
+    if (!main.some((m) => m.group === g)) main.push({ group: g, heavy: false });
+  }
+  return main;
+}
+
+function mainMusclesFor(lift) {
   if (!lift || lift.group === "Cardio" || lift.group === "My lifts") return [];
   const base = lift.group === "Glutes" ? "Legs" : lift.group;
   const barbell = HEAVY_EQUIP.includes(lift.equip) && lift.kind === "weight";
@@ -584,6 +604,32 @@ function recoveryStatus(group, lastTrained, heavy, now) {
   return { status, hoursAgo, readyIn: Math.max(0, ready - hoursAgo) };
 }
 
+// Finishing a workout starts every worked group's clock at the finish time.
+// log: { group: { at, heavy } }. Only exercises with a set checked off count.
+function stampRecovery(log, entries, liftLookup, finishedAt) {
+  const out = { ...log };
+  for (const raw of entries) {
+    const e = normEntry(raw);
+    if (!e.rows.some((r) => r.done)) continue;
+    for (const m of musclesFor(liftLookup(e.lift))) {
+      const prev = out[m.group];
+      const heavyToday = prev && prev.heavy && finishedAt - prev.at < 12 * 3600000;
+      out[m.group] = { at: finishedAt, heavy: m.heavy || Boolean(heavyToday) };
+    }
+  }
+  return out;
+}
+
+// Recommended lifts in Add exercise: ones you've done before first (most recent first), then popular ones.
+function recommendedLifts(doneBefore, popular, isLift, limit = 14) {
+  const out = [];
+  for (const id of [...doneBefore.slice(0, 6), ...popular]) {
+    if (isLift(id) && !out.includes(id)) out.push(id);
+    if (out.length >= limit) break;
+  }
+  return out;
+}
+
 // "under 1 h", "20 h", "2.5 days" (read with "ago" or "ready in")
 function hoursText(h) {
   if (h < 1) return "under 1 h";
@@ -598,7 +644,7 @@ if (typeof module !== "undefined") {
     SET_TYPES, rowWeight, setLabels, newEntry, entryFromPlan, changeSetType, freshCopy, routineNameFor,
     checkEntry, isValidMax, isValidBodyweight, checkEstimate, topWeights, allSets, nextSet, daySummary, schemeText,
     STANDARDS, RANKS, rankCutoffs, liftRank, strongerThan, overallRank, volumeComparison, parseQuickLog, matchLift,
-    encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText,
+    encodeTeam, decodeTeam, cardSignature, ghostSetsAt, heightInches, heightText, rankUp, celebrationTier, REST_DEFAULT, RECOVERY, musclesFor, recoveryStatus, hoursText, stampRecovery, recommendedLifts,
   };
 }
 
@@ -897,11 +943,11 @@ if (typeof document !== "undefined") {
     if (!el) return;
     const st = (pickers[id] = pickers[id] || { query: "", group: "", limit: 24 });
     el.innerHTML = `
-      <div class="mine"></div>
+      ${id === "add-picker" ? "" : `<div class="mine"></div>`}
       <label class="search">
         ${SEARCH_ICON}
         <span class="sr-only">Search lifts</span>
-        <input type="search" class="lift-search" value="${st.query.replace(/"/g, "&quot;")}" placeholder="Search: squat, cable row, one-arm…" autocomplete="off" enterkeyhint="search">
+        <input type="search" class="lift-search" value="${st.query.replace(/"/g, "&quot;")}" placeholder="${id === "add-picker" ? "Search 460 lifts: bench, cable row, one-arm…" : "Search: squat, cable row, one-arm…"}" autocomplete="off" enterkeyhint="search">
       </label>
       <div class="group-chips" role="group" aria-label="Filter by muscle group">
         ${["", ...LIFT_GROUPS].map((g) => `<button type="button" class="group-chip" data-group="${g}" aria-pressed="${st.group === g}">${g || "All"}</button>`).join("")}
@@ -913,6 +959,7 @@ if (typeof document !== "undefined") {
   }
 
   function renderMine(el) {
+    if (!el.querySelector(".mine")) return;
     const mine = myLiftObjects();
     el.querySelector(".mine").innerHTML = `
       <p class="picker-sub">Your lifts <span class="count">${mine.length}</span></p>
@@ -920,6 +967,26 @@ if (typeof document !== "undefined") {
         ? `<ul class="mine-list">${mine.map((l) => `<li class="mine-chip">${figureSVG(l.pattern, l.equip, "chip-fig")}<span>${l.name}</span>
             <button type="button" class="mine-x" data-unpick="${l.id}" aria-label="Remove ${l.name}">${X_ICON}</button></li>`).join("")}</ul>`
         : `<p class="hint">None yet. Tap a lift below to add it.</p>`}`;
+  }
+
+  // In Add exercise a tap picks the lift for the next exercise (it doesn't toggle your list)
+  function chooseItem(l, tag) {
+    const onCard = entries.some((e) => e.lift === l.id);
+    const note = onCard ? "On the card" : tag;
+    return `<li><button type="button" class="result choose" data-pick="${l.id}">
+      ${figureSVG(l.pattern, l.equip, "thumb")}
+      <span class="r-text"><span class="r-name">${l.name}</span><span class="r-meta">${note ? `<span class="r-tag">${note}</span> ` : ""}${l.group} · ${equipLabel(l)}</span></span>
+      <span class="r-add" aria-hidden="true">${PLUS_ICON}</span>
+    </button></li>`;
+  }
+
+  // Lifts you've done before, most recent first
+  function doneBeforeIds() {
+    const ids = entries.filter((e) => e.rows.some((r) => r.done)).map((e) => e.lift);
+    if (session) for (const set of [...session.sets].reverse()) ids.push(set.lift);
+    for (const day of history) for (const line of day.lines || []) ids.push(line.lift);
+    ids.push(...Object.keys(previous), ...Object.keys(bests));
+    return ids.filter((id, i) => ids.indexOf(id) === i);
   }
 
   function resultItem(l) {
@@ -935,6 +1002,15 @@ if (typeof document !== "undefined") {
     const st = pickers[el.id];
     const area = el.querySelector(".results-area");
     const searching = st.query.trim() || st.group;
+    const choosing = el.id === "add-picker";
+    if (!searching && choosing) {
+      const before = doneBeforeIds();
+      const ids = recommendedLifts(before, [...RECOMMENDED[mode || "personal"], ...myLifts], (id) => Boolean(liftById(id).group));
+      area.innerHTML = `<p class="picker-sub">${before.length ? "Recommended for you" : "Popular lifts"}</p>
+        <ul class="results">${ids.map((id) => chooseItem(liftById(id), before.includes(id) ? "Done before" : "")).join("")}</ul>
+        <p class="hint small">Don't see it? Type above to search all ${library.length} lifts, or tap a muscle group.</p>`;
+      return;
+    }
     if (!searching) {
       const recs = RECOMMENDED[mode || "personal"].map(liftById).filter((l) => l.group);
       area.innerHTML = `<p class="picker-sub">Recommended</p><ul class="results">${recs.map(resultItem).join("")}</ul>
@@ -947,7 +1023,7 @@ if (typeof document !== "undefined") {
     const exact = q && library.some((l) => l.name.toLowerCase() === q.toLowerCase());
     area.innerHTML = `<p class="picker-sub">${found.length} ${found.length === 1 ? "lift" : "lifts"}${st.group ? ` in ${st.group}` : ""}</p>
       ${found.length
-        ? `<ul class="results">${shown.map(resultItem).join("")}</ul>`
+        ? `<ul class="results">${shown.map((l) => (choosing ? chooseItem(l, "") : resultItem(l))).join("")}</ul>`
         : `<div class="empty-box"><p class="empty-title">No lift matches “${escapeHTML(q)}”</p><p class="hint">Check the spelling, try fewer words, or add it as your own below.</p></div>`}
       ${found.length > shown.length ? `<button type="button" class="secondary more" data-more>Show ${Math.min(24, found.length - shown.length)} more</button>` : ""}
       ${q && !exact ? `<div class="own">
@@ -1001,17 +1077,7 @@ if (typeof document !== "undefined") {
       return renderResults(el);
     }
     const pick = e.target.closest("[data-pick]");
-    if (pick && el.id === "add-picker") {
-      const id = pick.dataset.pick;
-      if (!myLifts.includes(id)) { myLifts.push(id); afterLiftsChanged(); }
-      $("lift-field").hidden = false;
-      $("lift").value = id;
-      setFormFor(liftById(id), true);
-      openAddPicker(false);
-      $("lift-count-note").textContent = `${liftName(id)} picked.`;
-      $("lifts-count").textContent = myLifts.length;
-      return;
-    }
+    if (pick && el.id === "add-picker") return chooseLift(pick.dataset.pick);
     if (pick) {
       const id = pick.dataset.pick;
       if (myLifts.includes(id)) {
@@ -1113,6 +1179,14 @@ if (typeof document !== "undefined") {
     const stage = $("stage");
     const ns = nextSet(entries, maxes, step(), bar());
 
+    if (routineDraft === "team") {
+      stage.innerHTML = `<p class="done-msg">Team workout</p>
+        <p class="stage-label">You're building a team workout. Your own card comes back when you save or cancel it.</p>
+        <button type="button" class="primary" data-goto-team>Back to the Team tab</button>`;
+      lastBarKey = null;
+      stopGhostTick();
+      return;
+    }
     if (routineDraft) {
       const n = entries.length;
       stage.innerHTML = `<p class="done-msg">New routine</p>
@@ -1326,9 +1400,7 @@ if (typeof document !== "undefined") {
     $("panel-card").classList.toggle("building", routineDraft);
     $("add-form").hidden = !addOpen;
     renderNewWorkout();
-    const noLifts = myLifts.length === 0;
-    $("lift-field").hidden = noLifts;
-    if (noLifts) openAddPicker(true);
+    if (addOpen && !$("add-picker").innerHTML) renderPicker("add-picker");
     renderRoutines();
   }
 
@@ -1345,14 +1417,55 @@ if (typeof document !== "undefined") {
   // ---------- The add form changes with the lift you pick ----------
   const BAR_LIKE = ["barbell", "trap bar", "Smith machine", "EZ bar", "landmine"];
 
+  // Keep the Add exercise search fresh (recommended lifts, "on the card" tags)
   function renderLiftPicker() {
-    const select = $("lift");
-    const current = select.value;
-    const mine = myLiftObjects();
-    select.innerHTML = mine.map((l) => `<option value="${l.id}">${l.name}</option>`).join("");
-    if (mine.some((l) => l.id === current)) select.value = current;
-    setFormFor(liftById(select.value), select.value !== current);
+    const el = $("add-picker");
+    if (el && el.innerHTML) renderResults(el);
   }
+
+  // Tap a lift in Add exercise: it becomes the exercise you're setting up
+  function chooseLift(id) {
+    const lift = liftById(id);
+    if (!lift || !lift.kind) return;
+    if (!myLifts.includes(id)) { myLifts.push(id); save("liftday.myLifts", myLifts); $("lifts-count").textContent = myLifts.length; renderMaxLists(); }
+    $("lift").value = id;
+    $("add-status").textContent = "";
+    $("add-error").textContent = "";
+    $("chosen-lift").innerHTML = `${figureSVG(lift.pattern, lift.equip, "chosen-fig")}
+      <div class="chosen-text"><span class="chosen-name">${lift.name}</span><span class="r-meta">${lift.group} · ${equipLabel(lift)}</span></div>
+      <button type="button" class="secondary chosen-change" id="change-lift">Change</button>`;
+    $("add-picker").hidden = true;
+    $("add-details").hidden = false;
+    setFormFor(lift, true);
+    $("add-details").scrollIntoView({ block: "nearest", behavior: reduceMotion ? "auto" : "smooth" });
+    $("sets-select").focus({ preventScroll: true });
+  }
+
+  // Back to the search, ready for the next exercise
+  function resetAddForm(message = "") {
+    $("lift").value = "";
+    $("add-details").hidden = true;
+    $("add-picker").hidden = false;
+    const st = pickers["add-picker"];
+    if (st) { st.query = ""; st.group = ""; st.limit = 24; }
+    renderPicker("add-picker");
+    $("add-status").textContent = message;
+  }
+
+  function focusAddSearch() {
+    const box = $("add-picker").querySelector(".lift-search");
+    if (box) box.focus({ preventScroll: true });
+  }
+
+  $("add-form").addEventListener("click", (e) => {
+    if (e.target.closest("#change-lift")) { resetAddForm(); focusAddSearch(); }
+  });
+
+  $("add-done").addEventListener("click", () => {
+    addOpen = false;
+    resetAddForm();
+    renderToday();
+  });
 
   function setFormFor(lift, resetValues) {
     const form = $("add-form");
@@ -1377,7 +1490,6 @@ if (typeof document !== "undefined") {
     $("add-form").load.placeholder = type === "pct" ? "75" : "lbs";
   }
 
-  $("lift").addEventListener("change", (e) => setFormFor(liftById(e.target.value), true));
 
   $("add-form").addEventListener("click", (e) => {
     const b = e.target.closest("[data-loadtype]");
@@ -1388,9 +1500,13 @@ if (typeof document !== "undefined") {
     renderStage();
     renderCard();
     renderFinish();
+    renderTeamBuilder();
   }
 
-  function saveCard() { save("liftday.card", entries); }
+  function saveCard() {
+    if (routineDraft === "team") return; // a team workout in progress isn't the coach's own card
+    save("liftday.card", entries);
+  }
 
   function goToMax(lift) {
     showTab($("tab-me"));
@@ -1493,6 +1609,9 @@ if (typeof document !== "undefined") {
 
   function finishWorkout(note = "") {
     const summary = daySummary(entries, maxes, step(), bar());
+    // Every muscle you worked starts its recovery clock now (personal and team)
+    muscleLog = stampRecovery(muscleLog, entries, liftById, Date.now());
+    save("liftday.muscles", muscleLog);
     if (isPersonal()) {
       history.unshift({ date: new Date().toISOString(), ...summary });
       save("liftday.history", history);
@@ -1506,6 +1625,7 @@ if (typeof document !== "undefined") {
     finishNote = `${note}${isPersonal() ? "Saved to Home. " : ""}Your card is reset for next time.`;
     renderToday();
     renderHistory();
+    renderHome();
   }
 
   // Remember what you did so the Previous column can show it next time
@@ -1524,9 +1644,10 @@ if (typeof document !== "undefined") {
   // ---------- "Make this a routine?" ----------
   function askRoutine() {
     const dlg = $("routine-dialog");
-    $("routine-title").textContent = routineDraft ? "Name your routine" : role === "coach" && !isPersonal() ? "Save as a team workout?" : "Make this a routine?";
+    $("routine-title").textContent = routineDraft === "team" ? "Name this team workout" : routineDraft ? "Name your routine" : role === "coach" && !isPersonal() ? "Save as a team workout?" : "Make this a routine?";
     $("routine-skip").textContent = routineDraft ? "Keep editing" : "Not now";
-    $("routine-why").textContent = routineDraft ? "You'll find it under My routines on this tab."
+    $("routine-why").textContent = routineDraft === "team" ? "Players get it the next time you send them the team link."
+      : routineDraft ? "You'll find it under My routines on this tab."
       : role === "coach" && !isPersonal()
       ? "Players get it the next time you send them the team link."
       : "Save these exercises and sets so you can start this workout again with one tap.";
@@ -1544,6 +1665,11 @@ if (typeof document !== "undefined") {
     if (!name) { $("routine-error").textContent = "Give it a name."; return; }
     saveRoutine(name);
     dlg.close();
+    if (routineDraft === "team") {
+      endTeamWorkout();
+      $("team-status").textContent = `Saved ${name}. Send players the link again so they get it.`;
+      return;
+    }
     if (routineDraft) {
       // The plan is saved; the card goes back to empty
       routineDraft = false;
@@ -1607,6 +1733,7 @@ if (typeof document !== "undefined") {
   });
 
   function loadLines(lines, name) {
+    if (routineDraft === "team") endTeamWorkout();
     routineDraft = false;
     commitPrevious();
     entries = freshCopy(lines);
@@ -1623,6 +1750,7 @@ if (typeof document !== "undefined") {
   }
 
   $("clear-card").addEventListener("click", () => {
+    if (routineDraft === "team") endTeamWorkout();
     routineDraft = false;
     commitPrevious();
     entries = [];
@@ -1659,9 +1787,9 @@ if (typeof document !== "undefined") {
 
     entries.push(entry);
     finishNote = "";
-    addOpen = false;
     saveCard();
     renderToday();
+    resetAddForm(`${lift.name} added. Pick the next one, or tap Done.`);
   });
 
   // =================================================================
@@ -2031,6 +2159,9 @@ if (typeof document !== "undefined") {
       el.innerHTML = `
         <h2>${escapeHTML(t.name || "Your team")}</h2>
         ${t.coach ? `<p class="hint">Coach: ${escapeHTML(t.coach)}</p>` : ""}
+        <button type="button" class="primary new-workout gap-s" id="build-team-workout">
+          ${PLUS_ICON}<span>Build a team workout</span>
+        </button>
         <h3 class="sub">Workouts</h3>
         ${t.routines.length
           ? `<ul class="routines">${t.routines.map((r, i) => `<li class="routine">
@@ -2040,7 +2171,7 @@ if (typeof document !== "undefined") {
                 <button type="button" class="secondary" data-load-routine="${i}">Load to Today</button>
                 <button type="button" class="quiet-x" data-delete-routine="${i}">Delete</button>
               </div></li>`).join("")}</ul>`
-          : `<div class="empty-box"><p class="empty-title">No workouts yet</p><p class="hint">Build a workout on Today, then save it here. Players get every workout you save when they open your link.</p></div>`}
+          : `<div class="empty-box"><p class="empty-title">No workouts yet</p><p class="hint">Tap Build a team workout to add lifts, sets and reps. Players get every workout you save when they open your link.</p></div>`}
         <form class="inline-form save-routine" id="save-routine" novalidate>
           <label class="sr-only" for="routine-name">Workout name</label>
           <input id="routine-name" maxlength="30" placeholder="${entries.length ? "Name this workout, e.g. Monday lower" : "Add lifts on Today first"}" ${entries.length ? "" : "disabled"}>
@@ -2077,7 +2208,65 @@ if (typeof document !== "undefined") {
     }
   }
 
+  // ---------- Coaches build team workouts right on the Team tab ----------
+  // The same exercise builder as Today moves over here; the coach's own card is set aside.
+  let teamStash = null;
+
+  function moveBuilder(toTeam) {
+    if (toTeam) {
+      $("team-builder-slot").append($("card"), $("add-toggle"), $("add-form"));
+    } else {
+      $("finish-area").before($("card"));
+      $("routines-area").before($("add-toggle"), $("add-form"));
+    }
+    $("team-builder").hidden = !toTeam;
+    $("team-area").hidden = toTeam;
+  }
+
+  function startTeamWorkout() {
+    teamStash = { entries, cardRoutine };
+    entries = [];
+    routineDraft = "team";
+    addOpen = true;
+    moveBuilder(true);
+    $("team-status").textContent = "";
+    renderToday();
+    resetAddForm();
+    focusAddSearch();
+  }
+
+  function endTeamWorkout() {
+    if (teamStash) { entries = teamStash.entries; cardRoutine = teamStash.cardRoutine; }
+    teamStash = null;
+    routineDraft = false;
+    addOpen = false;
+    moveBuilder(false);
+    resetAddForm();
+    renderToday();
+    renderTeam();
+  }
+
+  function renderTeamBuilder() {
+    if (routineDraft !== "team") return;
+    const n = entries.length;
+    $("team-builder-head").innerHTML = `<p class="sheet-title big">New team workout</p>
+      <p class="hint">${n
+        ? `${n} ${n === 1 ? "lift" : "lifts"} so far. Add more, then save it for your players.`
+        : "Search for the lifts below and set the sets and reps your players should do."}</p>
+      <div class="ob-actions">
+        <button type="button" class="secondary" id="team-cancel-draft">Cancel</button>
+        ${n ? `<button type="button" class="primary" id="team-save-draft">Save team workout</button>` : ""}
+      </div>`;
+  }
+
+  document.addEventListener("click", (e) => {
+    if (e.target.closest("[data-goto-team]")) showTab($("tab-team"));
+  });
+
   $("panel-team").addEventListener("click", async (e) => {
+    if (e.target.closest("#build-team-workout")) return startTeamWorkout();
+    if (e.target.closest("#team-save-draft")) return askRoutine();
+    if (e.target.closest("#team-cancel-draft")) return endTeamWorkout();
     const load = e.target.closest("[data-load-routine]");
     if (load) {
       const r = team.routines[Number(load.dataset.loadRoutine)];
@@ -2548,8 +2737,8 @@ if (typeof document !== "undefined") {
     routineDraft = kind === "routine";
     addOpen = true;
     renderToday();
-    if (myLifts.length) $("lift").focus();
-    else { const box = document.querySelector("#add-picker input[type=search]"); if (box) box.focus(); }
+    resetAddForm();
+    focusAddSearch();
   }
 
   $("new-workout").addEventListener("click", () => startNewWorkout("workout"));
@@ -2626,7 +2815,8 @@ if (typeof document !== "undefined") {
     addOpen = true;
     $("add-toggle").setAttribute("aria-expanded", "true");
     renderCard();
-    if (myLifts.length) $("lift").focus();
+    resetAddForm();
+    focusAddSearch();
   });
 
   function openSetMenu(at) {
@@ -2711,20 +2901,6 @@ if (typeof document !== "undefined") {
   // =================================================================
   // Picking a lift inside Add exercise (search the whole library)
   // =================================================================
-
-  function openAddPicker(show) {
-    const el = $("add-picker");
-    el.hidden = !show;
-    $("find-lift").setAttribute("aria-expanded", show);
-    $("find-lift").textContent = show ? "Close search" : "Search all lifts";
-    if (show && !el.innerHTML) renderPicker("add-picker");
-  }
-
-  $("find-lift").addEventListener("click", () => {
-    const show = $("add-picker").hidden;
-    openAddPicker(show);
-    if (show) $("add-picker").querySelector(".lift-search").focus();
-  });
 
   // =================================================================
   // Rank-up celebration: bigger the higher you climb (personal only)
