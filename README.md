@@ -151,6 +151,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.15:** colorized with roles (impeccable colorize): gold = go, white = selected, green = done/ready, amber = almost, coral = resting/failure/error, sky = reference; royal-blue stage; Home colors only muscles that need rest
 - [x] **m2.14:** coach as overseer: players give their name when joining; live roster through ntfy.sh with each player's exercise, set and progress bar; player detail with sets-hit rate and lift progress
 - [x] **m2.13:** Profile dashboard like Hevy: header with workouts, week streak and volume; a 12-week chart (duration, volume, reps); Statistics (7-day front and back body graph, muscle distribution radar, set count per muscle by week, main exercises, monthly report); Exercises with per-lift history; Measurements (bodyweight over time); Calendar with streak and rest days
 - [x] **m2.12:** search-first Add exercise (no dropdown; done-before lifts lead the recommendations), coaches build team workouts on the Team tab, finishing a workout starts every worked muscle's recovery clock (personal and team), helper muscles

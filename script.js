@@ -3057,7 +3057,7 @@ if (typeof document !== "undefined") {
       <div class="recovery">
         <div class="body-wrap">${bodyMapSVG(statuses)}</div>
         <div class="recovery-side">
-          <ul class="legend">
+          <ul class="rec-legend">
             <li><span class="dot ready"></span>Ready</li>
             <li><span class="dot almost"></span>Almost</li>
             <li><span class="dot rest"></span>Resting</li>
@@ -3066,12 +3066,12 @@ if (typeof document !== "undefined") {
         </div>
       </div>
       ${anyTrained ? "" : `<p class="hint">Everything's green until you log sets. Each set you finish starts that muscle's recovery clock.</p>`}
-      <ul class="recovery-list">${[...rows].sort((a, b) => order[a.status] - order[b.status]).map((r) => `<li>
+      <ul class="recovery-list">${[...rows].sort((a, b) => order[a.status] - order[b.status]).map((r) => `<li class="${r.status}">
           <span class="dot ${r.status}"></span>
           <span class="rec-name">${r.group === "Grip & forearms" ? "Forearms" : r.group}</span>
           <span class="rec-text">${r.hoursAgo === null ? "Ready · not trained yet"
             : r.status === "ready" ? `Ready · trained ${hoursText(r.hoursAgo)} ago`
-            : `${STATUS_TEXT[r.status]} · ${hoursText(r.hoursAgo)} ago · ready in ~${hoursText(r.readyIn)}${r.heavy && r.group === "Legs" ? " (heavy day)" : ""}`}</span>
+            : `<span class="rec-pill ${r.status}">${STATUS_TEXT[r.status]}</span>ready in ~${hoursText(r.readyIn)}${r.heavy && r.group === "Legs" ? " (heavy day)" : ""}`}</span>
         </li>`).join("")}</ul>
       <p class="note">Recovery windows: abs and forearms 24 h, biceps and calves 24 to 48 h, triceps and shoulders 48 h, chest, back and legs 48 to 72 h, legs up to 96 h after heavy squats or deadlifts. General guidance; how you feel matters more.</p>`;
 
@@ -3475,7 +3475,7 @@ if (typeof document !== "undefined") {
     const max = Math.max(0, ...Object.values(sets));
     const levels = Object.fromEntries(Object.entries(sets).map(([g, v]) => [g, max ? v / max : 0]));
     return `<div class="body-pair">${bodyHeatSVG(levels, "front")}${bodyHeatSVG(levels, "back")}</div>
-      <div class="heat-key" aria-hidden="true"><span>Fewer sets</span><i></i><span>More sets</span></div>`;
+      <div class="heat-key" aria-hidden="true"><span>Fewer sets</span><i>${[0.35, 0.55, 0.78, 1].map((o) => `<b style="opacity:${o}"></b>`).join("")}</i><span>More sets</span></div>`;
   }
 
   // A row of 7 day buttons, a dot under days you lifted
@@ -3602,7 +3602,7 @@ if (typeof document !== "undefined") {
     return `${subHead("Muscle distribution")}
       ${chips([[30, "Last 30 days"], [90, "3 months"], [365, "Year"]], distRange, "data-dist-range")}
       ${radarChart(cur, prev)}
-      <div class="legend"><span><i style="background:${CUR}"></i>Last ${rangeName}</span><span><i style="background:${PREV}"></i>The ${rangeName} before</span></div>
+      <div class="chart-legend"><span><i style="background:${CUR}"></i>Last ${rangeName}</span><span><i style="background:${PREV}"></i>The ${rangeName} before</span></div>
       <table class="stat-table"><caption class="sr-only">Sets per area</caption><thead><tr><th scope="col">Area</th><th scope="col">Now</th><th scope="col">Before</th></tr></thead><tbody>${rows}</tbody></table>
       ${summaryCards(totalsBetween(history, from, to), totalsBetween(history, before, from), "Before")}
       <p class="note">Sets count fully for the main muscle and half for muscles that help (bench press: chest, plus half for triceps and shoulders).</p>`;
@@ -3771,7 +3771,7 @@ if (typeof document !== "undefined") {
       ${picked ? `<div class="cal-detail"><p class="cal-detail-title">${dayLabel(Date.parse(picked[0].date))}</p>${picked.map((day) => `
           <p class="hint small">${day.sets} sets · ${fmt(day.volume || 0)} lbs${day.minutes ? ` · ${durationText(day.minutes)}` : ""}</p>
           <ul class="best-list">${(day.lines || []).map((l) => `<li><span>${liftName(l.lift)}</span><strong>${historyLine(l)}</strong></li>`).join("")}</ul>`).join("")}</div>`
-        : `<p class="hint small">Gold days are workouts. Tap one to see what you did.</p>`}
+        : `<p class="hint small">Green days are workouts. Tap one to see what you did.</p>`}
       <div class="cal-week" aria-hidden="true">${WEEKDAYS.map((w) => `<span>${w[0]}</span>`).join("")}</div>
       ${grid}`;
   }

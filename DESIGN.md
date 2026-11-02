@@ -4,16 +4,25 @@ Game-day jersey: a deep navy field, your next weight set like a jersey number (w
 
 ## Colors
 
+Stadium lights at night: a cool navy field, one warm team gold that means "go", and a small set of status colors that always mean the same thing. Every color has one job.
+
 | Token | Value | Job |
 | --- | --- | --- |
 | `--navy-900` | `#0b1730` | Page background |
-| `--navy-800` | `#10213f` | The stage panel, inputs |
-| `--navy-700` | `#183059` | Secondary buttons, timer track |
-| `--line` | `#2a4475` | Dividers, borders, open set circles |
+| `--navy-800` | `#10213f` | Cards, inputs, panels |
+| `--navy-700` | `#183059` | Secondary buttons, timer track, normal set badges |
+| `--royal` | `#15336b` | The stage only: the one field that owns color, so the next set is the first thing you see |
+| `--line` | `#2a4475` | Dividers, borders |
 | `--white` | `#f4f6fa` | Main text, jersey number fill, 45 lb plates |
-| `--soft` | `#a9b8d0` | Labels and secondary text |
-| `--gold` | `#f3b62a` | Team color: primary buttons, done sets, next set, top set, timer, PR banner |
-| `--red` | `#ff7a6e` | Errors only |
+| `--soft` | `#a9b8d0` | Secondary text, and muscles that are fine |
+| `--gold` | `#f3b62a` | **Go.** The jersey outline, the one main action on a screen, the next set's outline, the rest timer, focus rings, what a player is doing right now, chart data |
+| `--sel` | `#f4f6fa` | **Selection.** The open tab, selected pills and toggles, a chosen lift, an open player card |
+| `--ok` / `--ok-bg` | `#4fd18b` / `#12352f` | **Done and ready.** Checked sets (green check, green row), added lifts, workout days on the calendar, gains, "Live" |
+| `--warn` / `--warn-bg` | `#f6c445` / `#3a3216` | **Almost.** Almost recovered, warm-up sets, short workouts |
+| `--bad` / `--bad-bg` | `#ff7a6e` / `#3d1f2a` | **Stop.** Resting muscles, failure sets, errors, "tap again to clear" |
+| `--info` / `--info-bg` | `#8fc3ff` / `#16305a` | **Reference.** Drop sets, links, Profile icons, last period on charts |
+
+Rules: status shows as the hue on a dark tint of itself (the set badges, the Resting / Almost ready pills), never as a saturated block with white text. On Home only muscles that need attention get color; ready ones go quiet in soft grey. Every pair passes WCAG AA on every surface (lowest: coral on the royal stage, 4.8:1), and status is always also in words (Resting, Almost ready, W, F, D, a check).
 
 ## Type
 
@@ -77,7 +86,7 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 ## Workout builder
 
 - **Exercise card:** picture, name in gold, scheme line, remove X. Under it a set table: Set · Previous · Lbs · Reps · check (Lbs hidden for bodyweight, timed and cardio lifts). Inputs are dark wells; the computed weight shows as the placeholder until you type your own.
-- **Set badge:** a 40px rounded square. Normal sets are numbered; W (amber), F (red), D (light blue). The next set to do gets a gold outline; done rows get a faint gold wash and a filled gold check.
+- **Set badge:** a 40px rounded square. Normal sets are numbered; W (amber on amber tint), F (coral on coral tint), D (sky on sky tint). The next set to do gets a gold outline; done rows turn green with a filled green check.
 - **Set menu and "Make this a routine?"** are bottom sheets (`<dialog>`), sliding up 240ms ease-out (none with reduced motion). The routine name is pre-filled ("Bench Press + Dumbbell Curl") and selected.
 - **Add exercise** folds away after you add one, behind a gold "Add exercise" button. Routines list under it with Start / Delete; the one on today's card has a gold border.
 - Editing a cell never redraws the table (so focus stays where you tapped); only the stage and totals update live.
