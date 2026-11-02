@@ -137,7 +137,9 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 
 ## Welcome (first visit)
 
-- The first screen is a working demo, not a question: "Your max 315", percent pills 65 to 90, and the stage on royal blue showing "Squat · 80% of 315", the jersey number 250, the loaded bar and "Each side". Change either and the plates load again. One gold **Start lifting**, then a secondary **I lift with a team**, then one line: no account, switch anytime. The title is 44px (it's the one sales screen).
+- **Welcome:** "WELCOME TO" (Oswald 22px, soft) over "LIFT DAY" (Oswald 72px, white) as one heading, one line on what it does, then the royal-blue stage with an **empty bar** and "45 LBS" in jersey numerals, and a gold **Get started**.
+- **Loading:** Get started loads the bar like a progress bar: a pair of 45s slides on every 340ms (300ms ease-out, from 56px out), the number counts 45 → 135 → 225 → 315, "Each side" updates, then "315 loaded. Let's lift." The button stays gold and reads "Loading the bar…". Reduced motion: plates fade in quickly, same order.
+- **Choice:** about 0.9s later, "How will you use Lift Day?" rises in with two cards, **Personal** and **Team** (Oswald names, a sentence each), focus on the first. Back from setup returns here, not to the welcome.
 
 ## Workout order
 

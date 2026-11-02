@@ -31,7 +31,7 @@ The tab bar sits at the bottom of the screen.
 
 **First visit**
 
-1. Pick **Just me** (personal training) or **My team**. You can switch later.
+1. The welcome shows an empty bar. Tap **Get started** and it loads to 315 like a loading screen, then pick **Personal** or **Team**. You can switch later.
    - **My team → Coach:** name your team, pick its lifts, then build workouts (see Teams below).
    - **My team → Player:** paste the team link or code your coach sent you, or just open the link.
 2. Personal: enter your **height and weight**, then your **gym** (bar weight and the plates you own). Coaches name their team. Every step can be skipped.
@@ -151,6 +151,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.18:** new first screen: "Welcome to LIFT DAY" with an empty bar; Get started loads it plate by plate to 315, then Personal or Team
 - [x] **m2.17:** Power type on navy: Oswald headings, buttons and tabs (from the awesome-design-skills "Power" style), keeping the navy, royal-blue stage and gold jersey number
 - [x] **m2.16:** TasteSkill audit fixes: welcome demo (try the math before setup), next set leads the Workout tab, Home answers what to train today, flatter surfaces and sentence-case labels, laptop layout with a left rail and two columns; fixed the header class clash that pushed top-set inputs sideways and a duplicate tab listener
 - [x] **m2.15:** colorized with roles (impeccable colorize): gold = go, white = selected, green = done/ready, amber = almost, coral = resting/failure/error, sky = reference; royal-blue stage; Home colors only muscles that need rest

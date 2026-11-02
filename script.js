@@ -933,7 +933,7 @@ if (typeof document !== "undefined") {
   let restTick = null;
   let lastBarKey = null;
   let audio = null;
-  let setupStep = mode ? null : "choose"; // "choose" or an index into setupSteps()
+  let setupStep = mode ? null : "welcome"; // "welcome", "choose", or an index into setupSteps()
   let finishNote = "";
   let loadType = "pct";
   let roster = load("liftday.roster", {}); // coach: players and their progress, from the live channel
@@ -1021,44 +1021,53 @@ if (typeof document !== "undefined") {
   // First visit: Personal or Team, then pick lifts (+ a short setup for Personal)
   // =================================================================
 
-  // ---------- The welcome demo ----------
-  let demoMax = 315;
-  let demoPct = 80;
+  // ---------- Get started: the bar loads to 315, then on to Personal or Team ----------
+  const SPLASH_LOAD = [45, 45, 45]; // per side: 45 + 3 x 45 x 2 = 315
+  let splashBusy = false;
 
-  function renderDemo(animate) {
-    const out = $("demo-out");
-    if (!out) return;
-    if (!isValidMax(demoMax)) {
-      out.innerHTML = `<p class="demo-error">Enter a max between 45 and 1,500 lbs.</p>`;
-      return;
-    }
-    const w = setWeight(demoMax, demoPct, ROUND_TO, BAR);
-    const load = platesPerSide(w, BAR, PLATES);
-    out.innerHTML = `<p class="stage-label"><strong>Squat</strong> · ${demoPct}% of ${demoMax}</p>
-      <p class="jersey">${w}<small>LBS</small></p>
-      ${barbellSVG(load || [])}
-      <p class="plates-text">${load === null ? "Lighter than the bar" : load.length ? `Each side: <strong>${load.join(" + ")}</strong>` : "Just the bar"}</p>`;
-    if (animate) loadPlates(out.querySelector(".barbell"));
+  function runSplash() {
+    if (splashBusy) return;
+    splashBusy = true;
+    const btn = $("get-started");
+    btn.disabled = true;
+    btn.textContent = "Loading the bar…";
+    const stage = $("splash-stage");
+    stage.querySelector(".barbell").outerHTML = barbellSVG(SPLASH_LOAD);
+    const svg = stage.querySelector(".barbell");
+    const plates = [...svg.querySelectorAll(".plate")];
+    const step = reduceMotion ? 0 : 340; // one pair of plates every 340ms
+    const total = 45 + SPLASH_LOAD.reduce((a, p) => a + 2 * p, 0);
+    SPLASH_LOAD.forEach((p, i) => {
+      for (const plate of plates.filter((x) => Number(x.dataset.i) === i)) {
+        const side = Number(plate.dataset.side);
+        plate.animate(
+          reduceMotion ? [{ opacity: 0 }, { opacity: 1 }]
+            : [{ transform: `translateX(${side * 56}px)`, opacity: 0 }, { transform: "none", opacity: 1 }],
+          { duration: reduceMotion ? 150 : 300, delay: i * step, easing: "cubic-bezier(0.23, 1, 0.32, 1)", fill: "backwards" }
+        );
+      }
+      setTimeout(() => {
+        const now = 45 + SPLASH_LOAD.slice(0, i + 1).reduce((a, x) => a + 2 * x, 0);
+        $("splash-weight").innerHTML = `${now}<small>LBS</small>`;
+        $("splash-note").innerHTML = `Each side: <strong>${SPLASH_LOAD.slice(0, i + 1).join(" + ")}</strong>`;
+      }, i * step + (reduceMotion ? 0 : 160));
+    });
+    setTimeout(() => {
+      $("splash-note").innerHTML = `<strong>${total} loaded.</strong> Let's lift.`;
+    }, SPLASH_LOAD.length * step + 60);
+    setTimeout(() => {
+      splashBusy = false;
+      setupStep = "choose";
+      renderSetup();
+      const inner = $("onboarding").querySelector(".ob-inner");
+      if (inner && !reduceMotion) inner.animate([{ opacity: 0, transform: "translateY(12px)" }, { opacity: 1, transform: "none" }], { duration: 240, easing: "cubic-bezier(0.23, 1, 0.32, 1)" });
+      const first = $("onboarding").querySelector(".choice");
+      if (first) first.focus({ preventScroll: true });
+    }, SPLASH_LOAD.length * step + (reduceMotion ? 500 : 900));
   }
 
-  document.addEventListener("input", (e) => {
-    if (e.target.id !== "demo-max") return;
-    demoMax = Number(e.target.value);
-    renderDemo(false);
-  });
-  document.addEventListener("change", (e) => {
-    if (e.target.id === "demo-max") renderDemo(true);
-  });
   document.addEventListener("click", (e) => {
-    const b = e.target.closest("[data-demo-pct]");
-    if (!b) return;
-    demoPct = Number(b.dataset.demoPct);
-    for (const x of document.querySelectorAll("[data-demo-pct]")) {
-      const on = x === b;
-      x.setAttribute("aria-pressed", on);
-      x.setAttribute("aria-checked", on);
-    }
-    renderDemo(true);
+    if (e.target.closest("#get-started")) runSplash();
   });
 
   const setupSteps = () => {
@@ -1071,26 +1080,37 @@ if (typeof document !== "undefined") {
 
   function renderSetup() {
     const box = $("onboarding");
-    if (setupStep === "choose") {
-      // First screen sells the one thing the app does: a percent becomes a loaded bar. Try it before signing up.
-      box.innerHTML = `<div class="ob-inner ob-welcome">
-        <h1 class="ob-title">Lift Day</h1>
+    if (setupStep === "welcome") {
+      // An empty bar. "Get started" loads it, plate by plate, like a loading screen.
+      box.innerHTML = `<div class="ob-inner splash">
+        <h1 class="splash-title"><span class="splash-kicker">Welcome to</span><span class="splash-name">Lift Day</span></h1>
         <p class="ob-lead">Your program says a percent. Lift Day turns it into the weight and loads the bar.</p>
-        <div class="stage demo" aria-label="Try it">
-          <div class="demo-controls">
-            <label class="demo-max"><span>Your max</span>
-              <input id="demo-max" type="number" inputmode="numeric" min="45" max="1500" value="${demoMax}" aria-describedby="demo-out"><span class="demo-unit">lbs</span></label>
-            <div class="demo-pcts" role="radiogroup" aria-label="Percent of max">
-              ${[65, 70, 75, 80, 85, 90].map((p) => `<button type="button" role="radio" class="pill" data-demo-pct="${p}" aria-pressed="${p === demoPct}" aria-checked="${p === demoPct}">${p}%</button>`).join("")}
-            </div>
-          </div>
-          <div id="demo-out" aria-live="polite"></div>
+        <div class="splash-stage" id="splash-stage">
+          <p class="jersey splash-weight" id="splash-weight">45<small>LBS</small></p>
+          ${barbellSVG([])}
+          <p class="plates-text" id="splash-note">Empty bar</p>
         </div>
-        <button type="button" class="primary ob-start" data-choose="personal">Start lifting</button>
-        <button type="button" class="secondary ob-team" data-choose="team">I lift with a team</button>
-        <p class="hint center">No account and no sign-up. Switch between your own training and a team anytime.</p>
+        <button type="button" class="primary ob-start" id="get-started">Get started</button>
       </div>`;
-      renderDemo(true);
+      return;
+    }
+
+    if (setupStep === "choose") {
+      box.innerHTML = `<div class="ob-inner ob-choose">
+        <h1 class="ob-title ob-title-sm">How will you use Lift Day?</h1>
+        <p class="ob-lead">Pick one. You can switch anytime in Profile.</p>
+        <div class="choices">
+          <button type="button" class="choice" data-choose="personal">
+            <span class="choice-name">Personal</span>
+            <span class="choice-desc">Your own training. Pick your lifts, set your maxes and your gym, and keep a log of your lift days, PRs and ranks.</span>
+          </button>
+          <button type="button" class="choice" data-choose="team">
+            <span class="choice-name">Team</span>
+            <span class="choice-desc">Your coach writes the program and follows your sets live, or you're the coach. Join with a team link or build your team.</span>
+          </button>
+        </div>
+        <p class="hint center">No account and no sign-up.</p>
+      </div>`;
       return;
     }
 
