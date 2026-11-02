@@ -26,8 +26,9 @@ Rules: status shows as the hue on a dark tint of itself (the set badges, the Res
 
 ## Type
 
-- **Big Shoulders Display** (900): the jersey number, title, timer, big messages. Only for big numbers and short words.
-- **Archivo**: everything else. Inputs are 18px so iPhones don't zoom on focus.
+- **Big Shoulders Display** (900): the jersey number and the rest timer only. Nothing else uses it, so the number you load stays unmistakable.
+- **Oswald** (500 to 700, uppercase, slight tracking): headings, the title, buttons, tabs, pills, readouts and names. This is the "Power" style from the awesome-design-skills set, applied on Lift Day's navy instead of its black, so the team colors and the royal-blue stage stay.
+- **Archivo**: body text, labels, inputs and table cells. Kept for reading at small sizes mid-set; inputs are 18px so iPhones don't zoom on focus.
 - All numbers use tabular figures so columns don't jump.
 
 ## Layout (phone first, max 34rem)

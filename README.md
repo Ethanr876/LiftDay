@@ -151,6 +151,7 @@ Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up wi
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
+- [x] **m2.17:** Power type on navy: Oswald headings, buttons and tabs (from the awesome-design-skills "Power" style), keeping the navy, royal-blue stage and gold jersey number
 - [x] **m2.16:** TasteSkill audit fixes: welcome demo (try the math before setup), next set leads the Workout tab, Home answers what to train today, flatter surfaces and sentence-case labels, laptop layout with a left rail and two columns; fixed the header class clash that pushed top-set inputs sideways and a duplicate tab listener
 - [x] **m2.15:** colorized with roles (impeccable colorize): gold = go, white = selected, green = done/ready, amber = almost, coral = resting/failure/error, sky = reference; royal-blue stage; Home colors only muscles that need rest
 - [x] **m2.14:** coach as overseer: players give their name when joining; live roster through ntfy.sh with each player's exercise, set and progress bar; player detail with sets-hit rate and lift progress

@@ -1898,3 +1898,42 @@ h2 { font-size: 1.0625rem; }
   #panel-team > * { max-width: 44rem; }
   .pr-banner { left: calc(50% + 7.5rem); }
 }
+
+/* =====================================================================
+   Power type on navy: condensed Oswald for headings, buttons and tabs.
+   Body text stays Archivo (easier to read small and mid-set); the jersey number keeps Big Shoulders.
+   ===================================================================== */
+:root {
+  --power: "Oswald", "Archivo", sans-serif;   /* navy version: Lift Day's own colors, Power's type */
+}
+
+/* big condensed headings */
+header.top h1, .ob-title, h2, .sub, .answer, .done-msg, .sheet-title.big, .rank-title, .overall-rank,
+.ob-step-title, .team-name, .me-name, .readout-val, .cal-month, .chosen-name, .p-name {
+  font-family: var(--power);
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+  -webkit-text-stroke: 0;
+}
+header.top h1 { font-size: 1.875rem; font-weight: 700; color: var(--white); }
+.ob-title { font-size: 3rem; font-weight: 700; color: var(--white); }
+.today-answer .answer { font-size: 1.75rem; line-height: 1.1; }
+.done-msg { font-size: 2.5rem; }
+.overall-rank { font-size: 3.5rem; font-weight: 700; }
+h2 { font-size: 1.25rem; }
+
+/* buttons and tabs speak in the same voice */
+.primary, .secondary, .pill, .tabs button, .me-tile, .new-workout, .seg-btn strong {
+  font-family: var(--power);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.primary { font-weight: 600; }
+
+/* the stage keeps its royal-blue field */
+.jersey { -webkit-text-stroke-color: var(--gold); }
+
+/* the jersey number keeps its own face */
+.jersey, .timer-time { font-family: var(--jersey); }
