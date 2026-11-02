@@ -77,7 +77,7 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 
 ## Condensed layout (bottom tabs)
 
-- **Tab bar** fixed to the bottom: Home, Workout, Ranks (personal) or Team (team), Profile. Line icons, label under each, gold for the open tab. Header shrinks to the title and date.
+- **Tab bar** fixed to the bottom: Home, Workout, Ranks (personal) or Team (team), Profile. Line icons, label under each; the open tab is white with a short white bar on the top edge. Header shrinks to the title and date.
 - **Profile** folds into sections (`<details>`): Maxes & bodyweight (open), My lifts (with a count), My gym and PR sound (personal), then the Personal/Team switch.
 - **Rank badges** (`figures.js`, `rankBadgeSVG`): a hexagon with a star that gains a ring (Silver), a spiked rim (Gold, bigger at Platinum), wings (Diamond, bigger at Champion), a star crest (Titan) and a prismatic gradient (Olympian). Ranks you haven't reached show grayscale and dimmed on the ladder.
 - **Recovery map** (`bodyMapSVG`): front view, muscle regions filled green `#4fd18b`, yellow `#f6c445`, red `#ff6b5e`. Next to it a legend; under it a list sorted by what needs the most rest.
@@ -133,6 +133,28 @@ Empty card, next set's lift has no max, weight lighter than the bar, just the ba
 - **Players** heading with a live pill on the right: green pulsing dot "Live", yellow "Connecting…", gray "Offline".
 - **Player card:** initial avatar, name, a status dot (green = lifting in the last 20 min, gold = finished, gray = idle) with "just now / 5 min ago", the current exercise and set in gold ("Squat · set 2 of 2"), a soft line with the workout, exercise x of y and sets done, and a thin gold progress bar. Tap to open: Workouts finished and Sets hit tiles, Progress (first → best weight, gain in green), Recent workouts (short ones in yellow), and a quiet Remove.
 - **Player's Team tab:** a card showing the name the coach sees, a Change form, and whether the last update reached the coach.
+
+## Welcome (first visit)
+
+- The first screen is a working demo, not a question: "Your max 315", percent pills 65 to 90, and the stage on royal blue showing "Squat · 80% of 315", the jersey number 250, the loaded bar and "Each side". Change either and the plates load again. One gold **Start lifting**, then a secondary **I lift with a team**, then one line: no account, switch anytime. The title is 44px (it's the one sales screen).
+
+## Workout order
+
+- Empty card: New workout (gold) and Start a new routine, Just log, then the stage's empty message and your routines.
+- With a workout: the **stage leads**, then the card, Finish, Add exercise (secondary), Just log, and New workout / Start a new routine as one quiet row of two at the bottom. Done with CSS `order`, so nothing moves in the DOM.
+
+## Home (answer first)
+
+- The heading answers "what can I train today?": "Ready today: back, biceps, forearms and abs +1 more", a line naming what's still resting, and one gold **Start a workout** (or "Go to today's workout"). Then the body map at 12.5rem with the key in a row, then **Recovering**: only resting and almost-ready groups, each with a Resting / Almost ready tag and its ready-in time. Brand-new users open on Workout instead.
+
+## Surfaces
+
+- Resting cards (exercise cards, team cards, the dashboard, summary tiles, player cards) separate from the page by one tone step (`--navy-800` on `--navy-900`), no border. Controls keep their 1px border. Small labels are sentence case at 13px (Set · Previous · Lbs · Reps), never uppercase tracked. The tab bar is solid, no blur.
+
+## Laptop (64rem and up)
+
+- The bottom bar becomes a 15rem rail on the left (icon + label rows, the open one on `--navy-800`). Content sits beside it, up to 72rem.
+- Two columns where a screen has two jobs: **Workout** (the stage stays put on the left while you work down the card on the right; jersey number 9rem), **Home** (answer and map | recovering list), **Profile** (you and your chart | tiles and settings), **Ranks** (your ranks | the whole ladder). Team, sub-pages and the welcome stay single columns.
 
 ## Rank-up celebration
 

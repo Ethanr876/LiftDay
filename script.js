@@ -1021,6 +1021,46 @@ if (typeof document !== "undefined") {
   // First visit: Personal or Team, then pick lifts (+ a short setup for Personal)
   // =================================================================
 
+  // ---------- The welcome demo ----------
+  let demoMax = 315;
+  let demoPct = 80;
+
+  function renderDemo(animate) {
+    const out = $("demo-out");
+    if (!out) return;
+    if (!isValidMax(demoMax)) {
+      out.innerHTML = `<p class="demo-error">Enter a max between 45 and 1,500 lbs.</p>`;
+      return;
+    }
+    const w = setWeight(demoMax, demoPct, ROUND_TO, BAR);
+    const load = platesPerSide(w, BAR, PLATES);
+    out.innerHTML = `<p class="stage-label"><strong>Squat</strong> · ${demoPct}% of ${demoMax}</p>
+      <p class="jersey">${w}<small>LBS</small></p>
+      ${barbellSVG(load || [])}
+      <p class="plates-text">${load === null ? "Lighter than the bar" : load.length ? `Each side: <strong>${load.join(" + ")}</strong>` : "Just the bar"}</p>`;
+    if (animate) loadPlates(out.querySelector(".barbell"));
+  }
+
+  document.addEventListener("input", (e) => {
+    if (e.target.id !== "demo-max") return;
+    demoMax = Number(e.target.value);
+    renderDemo(false);
+  });
+  document.addEventListener("change", (e) => {
+    if (e.target.id === "demo-max") renderDemo(true);
+  });
+  document.addEventListener("click", (e) => {
+    const b = e.target.closest("[data-demo-pct]");
+    if (!b) return;
+    demoPct = Number(b.dataset.demoPct);
+    for (const x of document.querySelectorAll("[data-demo-pct]")) {
+      const on = x === b;
+      x.setAttribute("aria-pressed", on);
+      x.setAttribute("aria-checked", on);
+    }
+    renderDemo(true);
+  });
+
   const setupSteps = () => {
     if (isPersonal()) return ["bw", "gym"];
     if (pendingTeam && role === "player") return ["join"];
@@ -1032,22 +1072,25 @@ if (typeof document !== "undefined") {
   function renderSetup() {
     const box = $("onboarding");
     if (setupStep === "choose") {
-      box.innerHTML = `<div class="ob-inner">
+      // First screen sells the one thing the app does: a percent becomes a loaded bar. Try it before signing up.
+      box.innerHTML = `<div class="ob-inner ob-welcome">
         <h1 class="ob-title">Lift Day</h1>
-        <p class="ob-lead">Your program says a percent. Lift Day tells you the weight, loads the bar for you, and times your rest.</p>
-        <h2>Who's lifting?</h2>
-        <div class="choices">
-          <button type="button" class="choice" data-choose="personal">
-            <span class="choice-name">Just me</span>
-            <span class="choice-desc">Your own training. Pick your lifts, set up your maxes and your gym, and keep a log of your lift days and PRs.</span>
-          </button>
-          <button type="button" class="choice" data-choose="team">
-            <span class="choice-name">My team</span>
-            <span class="choice-desc">Your coach writes the program. Pick the lifts your team does and get every set's weight.</span>
-          </button>
+        <p class="ob-lead">Your program says a percent. Lift Day turns it into the weight and loads the bar.</p>
+        <div class="stage demo" aria-label="Try it">
+          <div class="demo-controls">
+            <label class="demo-max"><span>Your max</span>
+              <input id="demo-max" type="number" inputmode="numeric" min="45" max="1500" value="${demoMax}" aria-describedby="demo-out"><span class="demo-unit">lbs</span></label>
+            <div class="demo-pcts" role="radiogroup" aria-label="Percent of max">
+              ${[65, 70, 75, 80, 85, 90].map((p) => `<button type="button" role="radio" class="pill" data-demo-pct="${p}" aria-pressed="${p === demoPct}" aria-checked="${p === demoPct}">${p}%</button>`).join("")}
+            </div>
+          </div>
+          <div id="demo-out" aria-live="polite"></div>
         </div>
-        <p class="hint">You can switch anytime.</p>
+        <button type="button" class="primary ob-start" data-choose="personal">Start lifting</button>
+        <button type="button" class="secondary ob-team" data-choose="team">I lift with a team</button>
+        <p class="hint center">No account and no sign-up. Switch between your own training and a team anytime.</p>
       </div>`;
+      renderDemo(true);
       return;
     }
 
@@ -1406,7 +1449,7 @@ if (typeof document !== "undefined") {
     $("tab-ranks").hidden = !isPersonal();
     $("tab-team").hidden = isPersonal();
     renderAll();
-    showTab(entries.length ? $("tab-card") : $("tab-home"));
+    showTab(entries.length || !history.length ? $("tab-card") : $("tab-home")); // brand-new users start where the app does its job
   }
 
   function showSetup(index) {
@@ -1642,7 +1685,7 @@ if (typeof document !== "undefined") {
 
     $("clear-card").disabled = entries.length === 0;
     $("add-toggle").hidden = entries.length === 0 || addOpen;
-    $("add-toggle").className = `${routineDraft && entries.length ? "secondary" : "primary"} add-toggle`;
+    $("add-toggle").className = "secondary add-toggle"; // Set done and Finish are the gold actions once a workout exists
     $("panel-card").classList.toggle("building", routineDraft);
     $("add-form").hidden = !addOpen;
     renderNewWorkout();
@@ -3053,27 +3096,45 @@ if (typeof document !== "undefined") {
     const statuses = Object.fromEntries(rows.map((r) => [r.group, r.status]));
     const order = { rest: 0, almost: 1, ready: 2 };
     const anyTrained = rows.some((r) => r.hoursAgo !== null);
+    const label = (g) => (g === "Grip & forearms" ? "forearms" : g.toLowerCase());
+    const list = (names) => names.length <= 1 ? names.join("") : `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}`;
+    const ready = rows.filter((r) => r.status === "ready").map((r) => label(r.group));
+    const waiting = rows.filter((r) => r.status !== "ready").sort((a, b) => order[a.status] - order[b.status] || b.readyIn - a.readyIn);
+    // The screen's one question: what can I train today?
+    const answer = !anyTrained || !waiting.length
+      ? "Everything's ready to train"
+      : ready.length
+        ? `Ready today: ${list(ready.slice(0, 4))}${ready.length > 4 ? ` +${ready.length - 4} more` : ""}`
+        : "Everything's still recovering";
+    const sub = !anyTrained
+      ? "Each set you finish starts that muscle's recovery clock, and the map turns red while it rests."
+      : waiting.length ? `Still resting: ${list(waiting.map((r) => label(r.group)))}.` : "Every muscle group is fully recovered.";
     $("recovery").innerHTML = `
+      <div class="home-left">
+      <div class="today-answer">
+        <h2 class="answer">${answer}</h2>
+        <p class="hint">${sub}</p>
+        <button type="button" class="primary" data-start-today>${entries.length ? "Go to today's workout" : "Start a workout"}</button>
+      </div>
       <div class="recovery">
         <div class="body-wrap">${bodyMapSVG(statuses)}</div>
-        <div class="recovery-side">
-          <ul class="rec-legend">
-            <li><span class="dot ready"></span>Ready</li>
-            <li><span class="dot almost"></span>Almost</li>
-            <li><span class="dot rest"></span>Resting</li>
-          </ul>
-          <p class="hint small">Back and triceps aren't visible from the front. They're in the list below.</p>
-        </div>
+        <ul class="rec-legend">
+          <li><span class="dot ready"></span>Ready</li>
+          <li><span class="dot almost"></span>Almost</li>
+          <li><span class="dot rest"></span>Resting</li>
+        </ul>
       </div>
-      ${anyTrained ? "" : `<p class="hint">Everything's green until you log sets. Each set you finish starts that muscle's recovery clock.</p>`}
-      <ul class="recovery-list">${[...rows].sort((a, b) => order[a.status] - order[b.status]).map((r) => `<li class="${r.status}">
+      </div>
+      <div class="home-right">
+      ${waiting.length ? `<h3 class="sub">Recovering</h3>
+        <ul class="recovery-list">${waiting.map((r) => `<li class="${r.status}">
           <span class="dot ${r.status}"></span>
           <span class="rec-name">${r.group === "Grip & forearms" ? "Forearms" : r.group}</span>
-          <span class="rec-text">${r.hoursAgo === null ? "Ready · not trained yet"
-            : r.status === "ready" ? `Ready · trained ${hoursText(r.hoursAgo)} ago`
-            : `<span class="rec-pill ${r.status}">${STATUS_TEXT[r.status]}</span>ready in ~${hoursText(r.readyIn)}${r.heavy && r.group === "Legs" ? " (heavy day)" : ""}`}</span>
+          <span class="rec-text"><span class="rec-pill ${r.status}">${STATUS_TEXT[r.status]}</span>ready in ~${hoursText(r.readyIn)}${r.heavy && r.group === "Legs" ? " (heavy day)" : ""}</span>
         </li>`).join("")}</ul>
-      <p class="note">Recovery windows: abs and forearms 24 h, biceps and calves 24 to 48 h, triceps and shoulders 48 h, chest, back and legs 48 to 72 h, legs up to 96 h after heavy squats or deadlifts. General guidance; how you feel matters more.</p>`;
+        <p class="hint small">Everything else is ready. Back and triceps aren't on the front view, so check them here.</p>` : ""}
+      <p class="note">Recovery windows: abs and forearms 24 h, biceps and calves 24 to 48 h, triceps and shoulders 48 h, chest, back and legs 48 to 72 h, legs up to 96 h after heavy squats or deadlifts. General guidance; how you feel matters more.</p>
+      </div>`;
 
     if (!isPersonal()) {
       $("home-team").innerHTML = team && (team.joined || role === "coach")
@@ -3086,7 +3147,9 @@ if (typeof document !== "undefined") {
   }
 
   document.addEventListener("click", (e) => {
-    if (e.target.closest("[data-goto-team]")) showTab($("tab-team"));
+    if (!e.target.closest("[data-start-today]")) return;
+    showTab($("tab-card"));
+    if (!entries.length) startNewWorkout("workout");
   });
 
   // =================================================================
@@ -3151,6 +3214,7 @@ if (typeof document !== "undefined") {
     $("new-routine").className = `secondary new-workout${armedFor === "routine" ? " armed" : ""}`;
     $("new-routine-text").textContent = armedFor === "routine" ? "Tap again to clear this card" : "Start a new routine";
     $("new-workout-bar").hidden = (!hasCard && addOpen) || routineDraft; // the form is already open
+    $("panel-card").classList.toggle("has-card", hasCard && !routineDraft); // the next set leads once there's a workout
   }
 
   function disarmNew() {
