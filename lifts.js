@@ -477,6 +477,15 @@ const RECOMMENDED = {
 };
 
 // Search shortcuts: what people type -> words in the lift names
+// Other names lifters call the main lifts. Search matches these too ("back squat" finds Squat).
+const LIFT_ALIASES = {
+  squat: ["back squat", "barbell squat", "barbell back squat", "high bar squat", "low bar squat"],
+  bench: ["flat bench", "barbell bench", "barbell bench press", "flat bench press"],
+  deadlift: ["conventional deadlift", "barbell deadlift"],
+  "overhead-press": ["military press", "shoulder press", "standing press", "strict press", "barbell overhead press"],
+  clean: ["barbell clean", "power cleans"],
+};
+
 const SEARCH_SYNONYMS = {
   db: "dumbbell", dbs: "dumbbell", bb: "barbell", kb: "kettlebell", kbs: "kettlebell", ohp: "overhead press",
   rdl: "romanian deadlift", sldl: "stiff-legged deadlift", ghr: "glute ham raise", hspu: "handstand push-up",

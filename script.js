@@ -104,8 +104,8 @@ function bodyweightRatio(max, bodyweight) {
 // ---------- The lift library ----------
 
 // Turn the rows in lifts.js into lift objects, then add the user's own lifts.
-function buildLibrary(rows, groups, customLifts = []) {
-  const lifts = rows.map(([id, name, g, equip, pattern, kind]) => ({ id, name, group: groups[g], equip, pattern, kind }));
+function buildLibrary(rows, groups, customLifts = [], aliases = {}) {
+  const lifts = rows.map(([id, name, g, equip, pattern, kind]) => ({ id, name, group: groups[g], equip, pattern, kind, aliases: aliases[id] || [] }));
   return lifts.concat(customLifts);
 }
 
@@ -131,11 +131,12 @@ function searchLifts(library, query, synonyms = {}, group = "") {
   for (const lift of library) {
     if (group && lift.group !== group) continue;
     const name = normalize(lift.name);
-    const haystack = `${name} ${normalize(lift.group)} ${normalize(lift.equip)}`;
+    const aka = (lift.aliases || []).map(normalize);
+    const haystack = `${name} ${normalize(lift.group)} ${normalize(lift.equip)} ${aka.join(" ")}`;
     // "ups" also matches "up", so "pull ups" finds Pull-Up
     if (!words.every((w) => haystack.includes(w) || (w.length >= 3 && w.endsWith("s") && haystack.includes(w.slice(0, -1))))) continue;
     let rank = 3;
-    if (q && name === q) rank = 0;
+    if (q && (name === q || aka.includes(q))) rank = 0;
     else if (q && name.startsWith(q)) rank = 1;
     else if (words.length && name.split(/[\s-]/).some((part) => part.startsWith(words[0]))) rank = 2;
     results.push({ lift, rank });
@@ -917,7 +918,7 @@ if (typeof document !== "undefined") {
   let library = [];
   let liftMap = new Map();
   function rebuildLibrary() {
-    library = buildLibrary(LIFT_ROWS, LIFT_GROUPS, customLifts);
+    library = buildLibrary(LIFT_ROWS, LIFT_GROUPS, customLifts, typeof LIFT_ALIASES === "undefined" ? {} : LIFT_ALIASES);
     liftMap = new Map(library.map((l) => [l.id, l]));
   }
   rebuildLibrary();

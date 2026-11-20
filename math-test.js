@@ -129,7 +129,7 @@ for (const [label, got, expected] of extra) {
 // ---------- Lift library + search (uses the real lifts.js) ----------
 const fs = require("fs");
 const libSrc = fs.readFileSync(__dirname + "/../lifts.js", "utf8");
-const { LIFT_ROWS, LIFT_GROUPS, SEARCH_SYNONYMS, RECOMMENDED } = new Function(libSrc + "; return { LIFT_ROWS, LIFT_GROUPS, SEARCH_SYNONYMS, RECOMMENDED };")();
+const { LIFT_ROWS, LIFT_GROUPS, SEARCH_SYNONYMS, RECOMMENDED, LIFT_ALIASES } = new Function(libSrc + "; return { LIFT_ROWS, LIFT_GROUPS, SEARCH_SYNONYMS, RECOMMENDED, LIFT_ALIASES };")();
 const lib = R.buildLibrary(LIFT_ROWS, LIFT_GROUPS);
 const ids = new Set(lib.map((l) => l.id));
 const names = (q, g) => R.searchLifts(lib, q, SEARCH_SYNONYMS, g).map((l) => l.name);
@@ -448,6 +448,23 @@ for (const [label, got, expected] of liveTests) {
   }
 }
 
-const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length + statTests.length + liveTests.length;
+// What lifters actually type
+const aliasLib = R.buildLibrary(LIFT_ROWS, LIFT_GROUPS, [], LIFT_ALIASES);
+const top = (q) => (R.searchLifts(aliasLib, q, SEARCH_SYNONYMS)[0] || {}).name;
+const aliasTests = [
+  ["\"back squat\" finds Squat first", top("back squat"), "Squat"],
+  ["\"military press\" finds Overhead Press", top("military press"), "Overhead Press"],
+  ["\"flat bench\" finds Bench Press", top("flat bench"), "Bench Press"],
+  ["\"barbell squat\" now leads with Squat", top("barbell squat"), "Squat"],
+  ["plain \"squat\" still finds Squat", top("squat"), "Squat"],
+];
+for (const [label, got, expected] of aliasTests) {
+  if (got !== expected) {
+    failed++;
+    console.log(`FAIL  ${label}: expected ${expected}, got ${got}`);
+  }
+}
+
+const total = cases.length + 2 + plateCases.length + 2 + extra.length + lib2.length + fun.length + rec.length + rowsTests.length + last.length + failTests.length + newTests.length + statTests.length + liveTests.length + aliasTests.length;
 console.log(failed ? `${failed} check(s) failed` : `All ${total} checks passed`);
 process.exit(failed ? 1 : 0);

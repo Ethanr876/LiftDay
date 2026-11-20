@@ -4,7 +4,7 @@ Your strength program says "4 x 5 at 80%." Lift Day tells you that's 250, shows 
 
 It's a small web app for lifters, built first for athletes on teams that run percentage-based programs, and now for people training on their own too. Pick your lifts from a library of 460, put in your maxes, add today's workout, and it walks you through every set.
 
-**Live app:** https://ethanr876.github.io/lift-day/
+**Live app:** https://ethanr876.github.io/LiftDay/
 *(MGIS130 Build Project, Web-App track, Fall 2026)*
 
 ## Why I built this
@@ -126,7 +126,7 @@ To check the math and search, run the test with Node:
 node tests/math-test.js
 ```
 
-It runs 211 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, profile stats (week streaks, rest days, weekly and monthly totals, sets per muscle, per-lift history, the bodyweight log), live team progress (channels, where a player is, reading and cleaning relay messages, replays not double-counted, hit rate and lift progress), their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
+It runs 216 checks I worked out by hand: 20 set weights, rounding, plates, max estimates, home-gym rounding, search ("db curl", "rdl", "single arm row", "pull ups", "back squat", "military press"), every kind of card line, ranks and roadmaps, muscle recovery (which groups each lift works, and red/yellow/green at the right hours), per-set rows (warm-up, failure and drop sets, failure sets with no rep count, helper muscles (bench also works triceps and shoulders), recovery clocks starting when you finish, lifts you've done before at the top of recommendations, profile stats (week streaks, rest days, weekly and monthly totals, sets per muscle, per-lift history, the bodyweight log), live team progress (channels, where a player is, reading and cleaning relay messages, replays not double-counted, hit rate and lift progress), their own weights, warm-ups left out of volume), height, rank-up detection and celebration tiers, volume comparisons, Just Log parsing, team links (including rejecting broken or tampered ones), ghost pacing, and that saved cards from older versions still load.
 
 ## Files
 
@@ -142,31 +142,46 @@ It runs 211 checks I worked out by hand: 20 set weights, rounding, plates, max e
 
 ## Project plan and status
 
-Each milestone gets a tagged commit (`m1`, `m2`, ...) so the history lines up with the plan.
+The one-page plan, both status updates and the reflection are in my myCourses submission. The milestones below track the plan; the commit history on GitHub shows when each one landed.
 
 - [x] **Oct 30:** project plan done, status update #1
 - [x] **m1:** maxes and a workout, every line's weight calculated and rounded, saved in the browser
 - [x] **m2:** game-day look, plates per side on an animated barbell, set check-off, rest timer, pound-for-pound + PRs
 - [x] **m2.5:** Personal vs Team, personal setup (max estimator, home gym, history), 460-lift library with search and pictures
 - [x] **m2.6:** coach/player teams by share link, Just Log (type or voice), ghost of your last session, ranks with roadmap, volume comparisons, PR sound
+- [x] **m2.7:** bottom tab bar (Home, Workout, Ranks/Team, Profile), rank badges, muscle recovery map, fun features personal-only
+- [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines
 - [x] **m2.9:** height + weight setup, lifts picked inside Add exercise, 2:30 default rest, rank-up celebrations
 - [x] **m2.10:** New workout button, Sets dropdown that draws one row per set with its type and reps, failure sets with no rep count
-- [x] **m2.18:** new first screen: "Welcome to LIFT DAY" with an empty bar; Get started loads it plate by plate to 315, then Personal or Team
-- [x] **m2.17:** Power type on navy: Oswald headings, buttons and tabs (from the awesome-design-skills "Power" style), keeping the navy, royal-blue stage and gold jersey number
-- [x] **m2.16:** TasteSkill audit fixes: welcome demo (try the math before setup), next set leads the Workout tab, Home answers what to train today, flatter surfaces and sentence-case labels, laptop layout with a left rail and two columns; fixed the header class clash that pushed top-set inputs sideways and a duplicate tab listener
-- [x] **m2.15:** colorized with roles (impeccable colorize): gold = go, white = selected, green = done/ready, amber = almost, coral = resting/failure/error, sky = reference; royal-blue stage; Home colors only muscles that need rest
-- [x] **m2.14:** coach as overseer: players give their name when joining; live roster through ntfy.sh with each player's exercise, set and progress bar; player detail with sets-hit rate and lift progress
-- [x] **m2.13:** Profile dashboard like Hevy: header with workouts, week streak and volume; a 12-week chart (duration, volume, reps); Statistics (7-day front and back body graph, muscle distribution radar, set count per muscle by week, main exercises, monthly report); Exercises with per-lift history; Measurements (bodyweight over time); Calendar with streak and rest days
-- [x] **m2.12:** search-first Add exercise (no dropdown; done-before lifts lead the recommendations), coaches build team workouts on the Team tab, finishing a workout starts every worked muscle's recovery clock (personal and team), helper muscles
 - [x] **m2.11:** Get your rank calculator on the Ranks tab (maxes and estimates right there), Start a new routine (build and save a routine without logging a workout); sample day removed
-- [x] **m2.8:** workout builder with a set table, set types (warm-up, normal, failure, drop), Add set, "Make this a routine?" and saved routines
-- [x] **m2.7:** bottom tab bar (Home, Workout, Ranks/Team, Profile), rank badges, muscle recovery map, fun features personal-only
-- [ ] **m3 (Nov 13):** lbs / kg, auto warm-up sets, status update #2, **feature freeze**
-- [ ] **m4 (Nov 16):** edge cases, phone polish, accessibility pass
-- [ ] **Nov 18:** "after" test with 5 lifters
+- [x] **m2.12:** search-first Add exercise (no dropdown; done-before lifts lead the recommendations), coaches build team workouts on the Team tab, finishing a workout starts every worked muscle's recovery clock (personal and team), helper muscles
+- [x] **m2.13:** Profile dashboard like Hevy: header with workouts, week streak and volume; a 12-week chart (duration, volume, reps); Statistics (7-day front and back body graph, muscle distribution radar, set count per muscle by week, main exercises, monthly report); Exercises with per-lift history; Measurements (bodyweight over time); Calendar with streak and rest days
+- [x] **m2.14:** coach as overseer: players give their name when joining; live roster through ntfy.sh with each player's exercise, set and progress bar; player detail with sets-hit rate and lift progress
+- [x] **m2.15:** colorized with roles (impeccable colorize): gold = go, white = selected, green = done/ready, amber = almost, coral = resting/failure/error, sky = reference; royal-blue stage; Home colors only muscles that need rest
+- [x] **m2.16:** TasteSkill audit fixes: welcome demo (try the math before setup), next set leads the Workout tab, Home answers what to train today, flatter surfaces and sentence-case labels, laptop layout with a left rail and two columns; fixed the header class clash that pushed top-set inputs sideways and a duplicate tab listener
+- [x] **m2.17:** Power type on navy: Oswald headings, buttons and tabs (from the awesome-design-skills "Power" style), keeping the navy, royal-blue stage and gold jersey number
+- [x] **m2.18:** new first screen: "Welcome to LIFT DAY" with an empty bar; Get started loads it plate by plate to 315, then Personal or Team
+- [x] **m3 (feature freeze):** froze features on Nov 2, earlier than the planned Nov 13, to leave time for testing and the demo. Cut on purpose: lbs / kg (every program I've lifted on uses lbs) and automatic warm-up sets (you add warm-ups yourself with the W set type, which turned out more flexible).
+- [x] **m4 (polish):** contrast checked to WCAG AA on every color pair, reduced-motion versions of every animation, keyboard focus on every control, phone and laptop layouts. Final check Nov 20 found and fixed one search gap ("back squat" found nothing).
+- [ ] **"After" test with lifters** (see How I'm measuring if it works)
 - [ ] **Nov 20:** final submission
 
-**Not in scope:** coach approval of join requests, team leaderboards, team PR alerts, streaks, and racing a friend's ghost (all need a server and accounts, and would put teammates' personal data online); "Gym Tetris" equipment swapping; readiness/fatigue scores (a website can't read sleep data, and swapping lifts for joint pain is medical advice); Apple Watch haptics; video; writing programs for people.
+## Decision log
+
+| Date | Decision | Why |
+| --- | --- | --- |
+| Oct 30 | Round to the nearest loadable weight; exact ties round up (157.5 → 160) | Matches how coaches round on the sheet; one rule everyone can predict |
+| Oct 30 | Round from the bar using the smallest plate pair you own | A home gym without 2.5s can't load 200; showing 195 is honest |
+| Oct 30 | Moved input checks out of the display code into the rules layer (`checkEntry`, `isValidMax`) | The AI put them in the display code, which broke the data / rules / display split; in the rules layer they're testable |
+| Oct 30 | Personal and Team modes, with team-only screens kept plain | Fun features (ranks, ghost, animal comparisons, PR sound) suit personal training, not a coach's program |
+| Oct 30 | Teams travel in a share link, no accounts | No server, no passwords, no personal data stored by me |
+| Nov 1 | Live coach view through ntfy.sh, a free relay with no account or key | A coach needs to see who's lifting; this does it with no secrets in the repo and only first names sent |
+| Nov 2 | Colors get one job each (gold = go, green = done, coral = resting, …) | Gold was on everything, so it meant nothing |
+| Nov 2 | Power type (Oswald) on navy, not on black | Black lost the team-jersey identity and the colored stage |
+| Nov 2 | Feature freeze; cut lbs / kg and auto warm-ups | Scope had grown far past the plan; time goes to testing and the demo |
+| Nov 20 | Added common names for the main lifts to search ("back squat", "military press") | Found in the final check: "back squat" returned nothing |
+
+**Not in scope:** coach approval of join requests, team leaderboards, team PR alerts, team streaks, and racing a friend's ghost (all need a server and accounts, and would put teammates' personal data online); "Gym Tetris" equipment swapping; readiness/fatigue scores (a website can't read sleep data, and swapping lifts for joint pain is medical advice); Apple Watch haptics; video; writing programs for people.
 
 ## How I'm measuring if it works
 
@@ -181,6 +196,7 @@ The goal is under 30 seconds with zero mistakes. Results go here once the test i
 ## Built with
 
 - HTML, CSS and JavaScript (no frameworks)
-- [Archivo](https://fonts.google.com/specimen/Archivo) and [Big Shoulders Display](https://fonts.google.com/specimen/Big+Shoulders+Display) from Google Fonts
+- [Archivo](https://fonts.google.com/specimen/Archivo), [Oswald](https://fonts.google.com/specimen/Oswald) and [Big Shoulders Display](https://fonts.google.com/specimen/Big+Shoulders+Display) from Google Fonts
+- [ntfy.sh](https://ntfy.sh) (free, no account) for the coach's live view
 - GitHub Pages for hosting
 - Claude (AI) helped write and review the code. What it got right, what it got wrong and what I changed is in my reflection.
